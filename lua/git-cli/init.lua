@@ -39,6 +39,37 @@ function M.handle_command(opts)
     end
 end
 
+---Finds an existing buffer that holds @c issue_number.
+---@param issue_number number
+---@return integer buf_id if a matching buffer is found, otherwise @c 0
+local find_existing_issue_buffer = function(issue_number)
+    local title_id = forge_issue_pattern .. tostring(issue_number)
+    local all_bufs = a.nvim_list_bufs()
+
+    for _, buf_id in pairs(all_bufs) do
+        local buf_name = a.nvim_buf_get_name(buf_id)
+        local found = string.find(buf_name, title_id, 1, true)
+        if found ~= nil then
+            return buf_id
+        end
+    end
+    return 0
+end
+
+---Changes the buffer options for @c buf to be unchangeable by normal operations.
+---Additionally, set buffer key mappings for user interface.
+---@param buf number Buffer ID to work on.
+local set_issue_buffer_options = function(buf)
+    a.nvim_set_option_value('readonly', true, { buf = buf })
+    a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
+    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
+    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+
+    a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
+        { nowait = true, desc = "Close Issue", silent = true })
+end
+
+
 --- Returns the standardized title of an issue.
 --- @param issue_json table Table representation of the issue JSON.
 --- @return string Concatentation of issue number and a shortened title.
@@ -79,10 +110,11 @@ function M.render_issue_to_buffer(buf, issue_json)
     if issue_json.author and issue_json.author.name then
         realName = '(' .. issue_json.author.name .. ') '
     end
+    a.nvim_buf_set_lines(buf, -1, -1, true, { 'Number: #' .. issue_json.number })
     a.nvim_buf_set_lines(buf, -1, -1, true,
         { 'Created by `@' .. issue_json.author.login .. '` ' .. realName .. 'at ' .. issue_json.createdAt })
     if not issue_json.closed then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state })
+        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.createdAt .. ')' })
     else
         a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.closedAt .. ')' })
     end
@@ -242,8 +274,27 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
         previewer = previewers.new_buffer_previewer({
             title = "Issue Preview",
             define_preview = function(self, entry)
-                a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                M.render_issue_to_buffer(self.state.bufnr, entry.value)
+                local buf = find_existing_issue_buffer(entry.number)
+
+                -- The issue was not rendered before. Render it for the previewer, but also
+                -- cache the content in a buffer.
+                if buf == 0 then
+                    -- Render once into the previewer.
+                    a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+                    M.render_issue_to_buffer(self.state.bufnr, entry.value)
+
+                    -- Cache for snappy opening.
+                    buf = M.render_issue_to_buffer(buf, entry.value)
+                    local title_ui = issue_title_ui(entry.value)
+                    a.nvim_buf_set_name(buf, title_ui)
+                    set_issue_buffer_options(buf)
+                else
+                    -- Display the previously rendered content for the issue. Comments will be
+                    -- present in this case.
+                    a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+                    local curr_buf_content = a.nvim_buf_get_lines(buf, 0, -1, false)
+                    a.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, curr_buf_content)
+                end
             end
         }),
         sorter = config.values.generic_sorter(opts),
@@ -334,30 +385,6 @@ local create_issue_window = function(buf, title_ui)
             end
         end
     })
-end
-
-local find_existing_issue_buffer = function(issue_number)
-    local title_id = forge_issue_pattern .. tostring(issue_number)
-    local all_bufs = a.nvim_list_bufs()
-
-    for _, buf_id in pairs(all_bufs) do
-        local buf_name = a.nvim_buf_get_name(buf_id)
-        local found = string.find(buf_name, title_id, 1, true)
-        if found ~= nil then
-            return buf_id
-        end
-    end
-    return 0
-end
-
-local set_issue_buffer_options = function(buf)
-    a.nvim_set_option_value('readonly', true, { buf = buf })
-    a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
-    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
-    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
-
-    a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
-        { nowait = true, desc = "Close Issue", silent = true })
 end
 
 function M.view_issue(issue_number, opts)
