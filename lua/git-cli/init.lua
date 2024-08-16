@@ -25,6 +25,8 @@ function M.setup(opts)
             -- issue_nbr = "102983",
         })
     end)
+
+    vim.keymap.set("n", "<leader>qc", M.cached_issues_picker)
 end
 
 function M.handle_command(opts)
@@ -69,7 +71,10 @@ local set_issue_buffer_options = function(buf)
         { nowait = true, desc = "Close Issue", silent = true })
 end
 
-
+local copy_buffer = function(from_buf, to_buf)
+    local curr_buf_content = a.nvim_buf_get_lines(from_buf, 0, -1, false)
+    a.nvim_buf_set_lines(to_buf, 0, -1, false, curr_buf_content)
+end
 --- Returns the standardized title of an issue.
 --- @param issue_json table Table representation of the issue JSON.
 --- @return string Concatentation of issue number and a shortened title.
@@ -211,12 +216,94 @@ function M.create_issue()
     vim.fn.system({ "gh", "issue", "create", "--title", title, "--label", labels })
 end
 
+function M.cached_issues_picker()
+    local ts = require("telescope")
+    local pickers = require("telescope.pickers")
+    local config = require("telescope.config").values
+    local finders = require("telescope.finders")
+    local previewers = require("telescope.previewers")
+    local actions = require("telescope.actions")
+    local make_entry = require("telescope.make_entry")
+    local opts = {}
+
+    local bufnrs = vim.tbl_filter(function(bufnr)
+        local bufname = a.nvim_buf_get_name(bufnr)
+        return string.find(bufname, "[Issue]", 1, true) ~= nil
+    end, vim.api.nvim_list_bufs())
+
+    if not next(bufnrs) then
+        print("No issues buffers found")
+        return
+    end
+
+    local buffers = {}
+    local default_selection_idx = 1
+    for _, bufnr in ipairs(bufnrs) do
+        local bufname = a.nvim_buf_get_name(bufnr)
+
+        local issue_number
+        for nbr in bufname:gmatch("#(%d)") do
+            issue_number = nbr
+            break
+        end
+        local element = {
+            bufnr = bufnr,
+            bufname = bufname,
+            issue_number = issue_number,
+        }
+        table.insert(buffers, element)
+    end
+
+    P(buffers)
+    pickers
+        .new({}, {
+            prompt_title = "Issue Buffers",
+            finder = finders.new_table {
+                results = buffers,
+                entry_maker = function(entry)
+                    return make_entry.set_default_entry_mt({
+                        ordinal = entry.issue_number .. ':' .. entry.bufname,
+                        bufnr = entry.bufnr,
+                        bufname = entry.bufname,
+                        issue_number = entry.issue_number,
+                        value = entry,
+                        display = entry.issue_number .. ' || ' .. entry.bufname,
+                    }, {})
+                end,
+            },
+            previewer = previewers.new_buffer_previewer({
+                title = "Issue Preview",
+                define_preview = function(self, entry)
+                    a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
+                    copy_buffer(entry.bufnr, self.state.bufnr)
+                end,
+            }),
+            sorter = config.generic_sorter(opts),
+            default_selection_index = default_selection_idx,
+            attach_mappings = function(prompt_bufnr)
+                local state = require("telescope.actions.state")
+                actions.select_default:replace(function()
+                    local selection = state.get_selected_entry()
+                    if selection == nil then
+                        ts.utils.warn_no_selection "Missing Issue Selection"
+                        return
+                    end
+                    M.view_issue(selection.value.number, {
+                        project = opts.project,
+                    })
+                end)
+                return true
+            end,
+        })
+        :find()
+end
+
 local create_telescope_picker_for_issue_list = function(issue_list_json)
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
     local entry_display = require("telescope.pickers.entry_display")
     local finders = require("telescope.finders")
-    local config = require("telescope.config")
+    local config = require("telescope.config").values
     local previewers = require("telescope.previewers")
     local make_entry = require("telescope.make_entry")
     local opts = {}
@@ -292,12 +379,11 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                     -- Display the previously rendered content for the issue. Comments will be
                     -- present in this case.
                     a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                    local curr_buf_content = a.nvim_buf_get_lines(buf, 0, -1, false)
-                    a.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, curr_buf_content)
+                    copy_buffer(buf, self.state.bufnr)
                 end
             end
         }),
-        sorter = config.values.generic_sorter(opts),
+        sorter = config.generic_sorter(opts),
         attach_mappings = function(prompt_bufnr)
             local actions = require("telescope.actions")
             local state = require("telescope.actions.state")
