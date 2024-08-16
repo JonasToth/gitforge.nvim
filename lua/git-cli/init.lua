@@ -18,14 +18,25 @@ function M.setup(opts)
         })
     end)
     vim.keymap.set("n", "<leader>qi", function()
-        M.view_issue({
+        M.view_issue("2", {
             -- project = "llvm/llvm-project",
             -- project = "JonasToth/dotfiles"
-            issue_nbr = "2",
             -- issue_nbr = "56777",
             -- issue_nbr = "102983",
         })
     end)
+end
+
+function M.handle_command(opts)
+    local subcommands = {}
+    for s in opts.args:gmatch("[^ ]+") do
+        table.insert(subcommands, s)
+    end
+    for _, command in ipairs(subcommands) do
+        if command == "list-labels" then
+            M.get_labels()
+        end
+    end
 end
 
 --- Returns the standardized title of an issue.
@@ -110,18 +121,6 @@ function M.render_issue_to_buffer(buf, issue_json)
     end
     a.nvim_set_option_value('modifiable', false, { buf = buf })
     return buf
-end
-
-function M.handle_command(opts)
-    local subcommands = {}
-    for s in opts.args:gmatch("[^ ]+") do
-        table.insert(subcommands, s)
-    end
-    for _, command in ipairs(subcommands) do
-        if command == "list-labels" then
-            M.get_labels()
-        end
-    end
 end
 
 -- Returns the issue labels of the current project.
@@ -255,8 +254,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                     ts.utils.warn_no_selection "Missing Issue Selection"
                     return
                 end
-                M.view_issue({
-                    issue_nbr = selection.value.number,
+                M.view_issue(selection.value.number, {
                     project = opts.project,
                 })
             end)
@@ -298,7 +296,67 @@ function M.list_issues(opts)
     call_handle:wait()
 end
 
-function M.view_issue(opts)
+---Creates a floating window for @c buf with the title @c title_ui
+---Creates an autocommand to close the floating window if it looses focus.
+---@param buf number Buffer-ID to display in the window.
+---@param title_ui string Human Readable title for the window.
+local create_issue_window = function(buf, title_ui)
+    local width = math.ceil(math.min(vim.o.columns, math.min(100, vim.o.columns - 20)))
+    local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
+    local row = math.ceil(vim.o.lines - height) * 0.5 - 1
+    local col = math.ceil(vim.o.columns - width) * 0.5 - 1
+    local win_options = {
+        relative = 'editor',
+        title = title_ui,
+        title_pos = 'center',
+        width = width,
+        height = height,
+        col = col,
+        row = row,
+        border = "single"
+    }
+    local win = a.nvim_open_win(buf, true, win_options)
+    if win == 0 then
+        print("Failed to open float for issue")
+        return
+    end
+    -- Switch to normal mode - Telescope selection leaves in insert mode?!
+    a.nvim_feedkeys(a.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
+    -- Automatically close then float when it is left.
+    a.nvim_create_autocmd("WinLeave", {
+        group = a.nvim_create_augroup("GitForge", { clear = true }),
+        callback = function()
+            if win ~= 0 then
+                a.nvim_win_close(win, true)
+                win = 0
+            end
+        end
+    })
+end
+
+local find_existing_issue_buffer = function(issue_number)
+    local title_id = forge_issue_pattern .. tostring(issue_number)
+    local all_bufs = a.nvim_list_bufs()
+
+    for _, buf_id in pairs(all_bufs) do
+        local buf_name = a.nvim_buf_get_name(buf_id)
+        local found = string.find(buf_name, title_id, 1, true)
+        if found ~= nil then
+            print("Found existing ticket buffer - reusing and updating it")
+            return buf_id
+        end
+    end
+    return 0
+end
+
+local set_issue_buffer_options = function(buf)
+    a.nvim_set_option_value('readonly', true, { buf = buf })
+    a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
+    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
+    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+end
+
+function M.view_issue(issue_number, opts)
     local open_buffer_with_issue = function(handle)
         if handle.code ~= 0 then
             print("Failed to retrieve issue content")
@@ -307,76 +365,32 @@ function M.view_issue(opts)
         end
         vim.schedule(function()
             local data = vim.fn.json_decode(handle.stdout)
-            local title_id = forge_issue_pattern .. tostring(data.number)
-            local all_bufs = a.nvim_list_bufs()
 
-            local buf = 0
-            for _, buf_id in pairs(all_bufs) do
-                local buf_name = a.nvim_buf_get_name(buf_id)
-                local found = string.find(buf_name, title_id, 1, true)
-                P(found)
-                if found ~= nil then
-                    print("Found existing ticket buffer - reusing and updating it")
-                    buf = buf_id
-                    break
-                end
-            end
+            local buf = find_existing_issue_buffer(issue_number)
 
             print("view single issue in buf: " .. tostring(buf))
             buf = M.render_issue_to_buffer(buf, data)
 
             local title_ui = issue_title_ui(data)
             a.nvim_buf_set_name(buf, title_ui)
-            a.nvim_set_option_value('readonly', true, { buf = buf })
-            a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
-            a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
-            a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+            set_issue_buffer_options(buf)
 
             a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
                 { nowait = true, desc = "Close Issue", silent = true })
 
-            local width = math.ceil(math.min(vim.o.columns, math.min(100, vim.o.columns - 20)))
-            local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
-            local row = math.ceil(vim.o.lines - height) * 0.5 - 1
-            local col = math.ceil(vim.o.columns - width) * 0.5 - 1
-            local win_options = {
-                relative = 'editor',
-                title = title_ui,
-                title_pos = 'center',
-                width = width,
-                height = height,
-                col = col,
-                row = row,
-                border = "single"
-            }
-            local win = a.nvim_open_win(buf, true, win_options)
-            if win == 0 then
-                print("Failed to open float for issue")
-                return
-            end
-            -- Switch to normal mode - Telescope selection leaves in insert mode?!
-            a.nvim_feedkeys(a.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
-            -- Automatically close then float when it is left.
-            a.nvim_create_autocmd("WinLeave", {
-                group = a.nvim_create_augroup("GitForge", { clear = true }),
-                callback = function()
-                    if win ~= 0 then
-                        a.nvim_win_close(win, true)
-                        win = 0
-                    end
-                end
-            })
+            create_issue_window(buf, title_ui)
         end)
     end
 
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local gh_call = { "gh", "issue", "view", opts.issue_nbr, "--json", required_fields }
+    local gh_call = { "gh", "issue", "view", issue_number, "--json", required_fields }
     if opts.project then
         table.insert(gh_call, "-R")
         table.insert(gh_call, opts.project)
     end
     P(gh_call)
+
     local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
     call_handle:wait()
 end
