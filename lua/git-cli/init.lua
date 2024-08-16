@@ -70,8 +70,9 @@ function M.render_issue_to_buffer(buf, issue_json)
     print("Rendering issue in buf: " .. tostring(buf))
     local desc = string.gsub(issue_json.body, "\r", "")
     a.nvim_set_option_value('modifiable', true, { buf = buf })
-    a.nvim_set_option_value('readonly', true, { buf = buf })
-    a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
+    a.nvim_set_option_value('readonly', false, { buf = buf })
+    a.nvim_set_option_value('buftype', 'nofile', { buf = buf })
+    a.nvim_set_option_value('swapfile', false, { buf = buf })
 
     a.nvim_buf_set_lines(buf, 0, -1, true, { '# ' .. issue_json.title, '' })
     local realName = ''
@@ -120,6 +121,7 @@ function M.render_issue_to_buffer(buf, issue_json)
         end
     end
     a.nvim_set_option_value('modifiable', false, { buf = buf })
+    a.nvim_set_option_value('readonly', true, { buf = buf })
     return buf
 end
 
@@ -342,7 +344,6 @@ local find_existing_issue_buffer = function(issue_number)
         local buf_name = a.nvim_buf_get_name(buf_id)
         local found = string.find(buf_name, title_id, 1, true)
         if found ~= nil then
-            print("Found existing ticket buffer - reusing and updating it")
             return buf_id
         end
     end
@@ -354,9 +355,14 @@ local set_issue_buffer_options = function(buf)
     a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
     a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
     a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+
+    a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
+        { nowait = true, desc = "Close Issue", silent = true })
 end
 
 function M.view_issue(issue_number, opts)
+    local buf = find_existing_issue_buffer(issue_number)
+
     local open_buffer_with_issue = function(handle)
         if handle.code ~= 0 then
             print("Failed to retrieve issue content")
@@ -366,8 +372,6 @@ function M.view_issue(issue_number, opts)
         vim.schedule(function()
             local data = vim.fn.json_decode(handle.stdout)
 
-            local buf = find_existing_issue_buffer(issue_number)
-
             print("view single issue in buf: " .. tostring(buf))
             buf = M.render_issue_to_buffer(buf, data)
 
@@ -375,10 +379,25 @@ function M.view_issue(issue_number, opts)
             a.nvim_buf_set_name(buf, title_ui)
             set_issue_buffer_options(buf)
 
-            a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
-                { nowait = true, desc = "Close Issue", silent = true })
-
             create_issue_window(buf, title_ui)
+        end)
+    end
+
+    local update_buffer_with_issue = function(handle)
+        if handle.code ~= 0 then
+            print("Failed to retrieve issue content")
+            P(handle)
+            return
+        end
+        vim.schedule(function()
+            local data = vim.fn.json_decode(handle.stdout)
+
+            print("update single issue in buf: " .. tostring(buf))
+            buf = M.render_issue_to_buffer(buf, data)
+
+            local title_ui = issue_title_ui(data)
+            a.nvim_buf_set_name(buf, title_ui)
+            set_issue_buffer_options(buf)
         end)
     end
 
@@ -391,8 +410,18 @@ function M.view_issue(issue_number, opts)
     end
     P(gh_call)
 
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
-    call_handle:wait()
+    if buf == 0 then
+        P("Issue not available as buffer - creating it new")
+        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
+        call_handle:wait()
+    else
+        P("Found issue in buffer - displaying old state and triggering update")
+        local title_ui = a.nvim_buf_get_name(buf)
+        create_issue_window(buf, title_ui)
+
+        -- Trigger an update after already opening the issue in a window.
+        vim.system(gh_call, { text = true, timeout = M.opts.timeout }, update_buffer_with_issue)
+    end
 end
 
 return M
