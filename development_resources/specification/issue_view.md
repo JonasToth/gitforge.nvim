@@ -55,6 +55,7 @@ The underlying loading of the contents may happen through the [Issue Cache](spec
 
 - icons or so for labels and state
 - folding for comments
-    - not sure how to do this with basic markdown
+    - works with treesitter based folding
+    - should be configurable on what to fold away by default
 - folding of `<detail>` sections (in comments)
 - folding of `hidden` comments
