@@ -58,6 +58,18 @@ local find_existing_issue_buffer = function(issue_number)
     return 0
 end
 
+--- Parses the buffer name and tries to retrieve the issue number and project.
+---@param buf number Buffer Id for the issue buffer
+local get_issue_id_from_buf = function(buf)
+    local buf_name = a.nvim_buf_get_name(buf)
+    if string.find(buf_name, "[Issue]", 1, true) == nil then
+        return nil
+    end
+    for nbr in buf_name:gmatch("#(%d)") do
+        return nbr
+    end
+end
+
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
 ---@param buf number Buffer ID to work on.
@@ -67,8 +79,22 @@ local set_issue_buffer_options = function(buf)
     a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
     a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
 
-    a.nvim_buf_set_keymap(buf, "n", "q", ":close<CR>",
+    a.nvim_buf_set_keymap(buf, "n", "<localleader>q", ":close<CR>",
         { nowait = true, desc = "Close Issue", silent = true })
+    vim.keymap.set("n", "<localleader>c", function()
+            local issue_number = get_issue_id_from_buf(buf)
+            if issue_number == nil then
+                print("Failed to determine issue id to comment on")
+                return
+            end
+            M.comment_on_issue(issue_number)
+        end,
+        { buffer = buf, nowait = true, desc = "Comment on Issue", silent = true })
+end
+
+local buffer_to_string = function(buf)
+    local curr_buf_content = a.nvim_buf_get_lines(buf, 0, -1, false)
+    return vim.fn.join(curr_buf_content, "\n")
 end
 
 local copy_buffer = function(from_buf, to_buf)
@@ -216,6 +242,61 @@ function M.create_issue()
     vim.fn.system({ "gh", "issue", "create", "--title", title, "--label", labels })
 end
 
+function M.comment_on_issue(issue_number)
+    local comment_file = os.tmpname()
+    print("Tempfile for comment: " .. comment_file)
+    local comment_buf = a.nvim_create_buf(false, false)
+    local cleanup = function()
+        os.remove(comment_file)
+    end
+    if comment_buf == 0 then
+        print("Failed to create buffer for commenting")
+        cleanup()
+        return
+    end
+    a.nvim_buf_set_name(comment_buf, comment_file)
+    a.nvim_set_option_value('readonly', false, { buf = comment_buf })
+    a.nvim_set_option_value('modifiable', true, { buf = comment_buf })
+    a.nvim_set_option_value('bufhidden', 'delete', { buf = comment_buf })
+    a.nvim_set_option_value('buflisted', false, { buf = comment_buf })
+    a.nvim_set_option_value('buftype', '', { buf = comment_buf })
+    a.nvim_set_option_value('filetype', 'markdown', { buf = comment_buf })
+    a.nvim_set_option_value('syntax', 'markdown', { buf = comment_buf })
+    a.nvim_set_option_value('swapfile', false, { buf = comment_buf })
+
+    local win_split = a.nvim_open_win(comment_buf, true, {
+        split = "below",
+    })
+    if win_split == 0 then
+        print("Failed to create window split for commenting")
+        cleanup()
+        return
+    end
+
+    vim.cmd("edit " .. comment_file)
+
+    local perform_comment = function()
+        local str = buffer_to_string(comment_buf)
+        if #str == 0 then
+            print("Aborted commenting with empty content")
+            cleanup()
+            return
+        end
+        print("Wrote something in the windows")
+        vim.fn.system({ "gh", "issue", "comment", issue_number, "--body-file", comment_file })
+        cleanup()
+    end
+    a.nvim_create_autocmd("WinLeave", {
+        group = a.nvim_create_augroup("GitForge", { clear = true }),
+        callback = function()
+            if win_split ~= 0 then
+                perform_comment()
+                win_split = 0
+            end
+        end
+    })
+end
+
 function M.cached_issues_picker()
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
@@ -240,12 +321,7 @@ function M.cached_issues_picker()
     local default_selection_idx = 1
     for _, bufnr in ipairs(bufnrs) do
         local bufname = a.nvim_buf_get_name(bufnr)
-
-        local issue_number
-        for nbr in bufname:gmatch("#(%d)") do
-            issue_number = nbr
-            break
-        end
+        local issue_number = get_issue_id_from_buf(bufnr)
         local element = {
             bufnr = bufnr,
             bufname = bufname,
@@ -422,9 +498,9 @@ function M.list_issues(opts)
         table.insert(gh_call, "--limit")
         table.insert(gh_call, tostring(opts.limit))
     end
-    if opts.filter_labels then
+    if opts.labels then
         table.insert(gh_call, "--label")
-        table.insert(gh_call, opts.filter_labels)
+        table.insert(gh_call, opts.labels)
     end
     if opts.assignee then
         table.insert(gh_call, "--assignee")
