@@ -1,4 +1,4 @@
 return {
-    "JonasToth/git-cli",
+    "JonasToth/gitforge.nvim",
     opts = {}
 }
