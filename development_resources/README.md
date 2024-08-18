@@ -18,6 +18,9 @@ The goal of this plugin is to keep most daily developer interactions with the pr
 within `nvim`. Especially quick actions like assigning an issue or writing a comment should not
 require a context switch to browser. It goes for functionality first, then customizability and
 finally asthetics.
+The heterogenity of the the various aspects (issues, code reviews/PRs, CI/CD) requires a modular
+structure to handle each aspect with a different "backend". The user interface _per aspect_ should
+be the same across different git forges. The module/feature set per git forge/backend may differ.
 
 ## Far Goals
 

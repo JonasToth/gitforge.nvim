@@ -21,6 +21,10 @@ Additionally, the project serves as an disambiguator of issue numbers and the li
       (`:cd` in `nvim` shows the current directory)
 - each project can receive specific configuration options that override the default options,
   missing options are filled with default choices
+- a project selects modules for different capabilities, the following scenario may happen:
+    - issues with jira
+    - pull requests with github
+    - CI/CD with buildbot
 
 ### Nice to Have
 
