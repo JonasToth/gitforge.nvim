@@ -1,4 +1,4 @@
-# gitforge.nvim - NeoVim Plugin to Access Your Issues, PRs and CI/CD
+# gitforge.nvim - Issues, PRs, CI/CD
 
 This plugin aims to provide integrated access to various Git Forges for your daily development
 tasks - working with issues, working with PRs and checking CI/CD pipelines.
