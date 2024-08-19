@@ -274,6 +274,8 @@ function M.comment_on_issue(issue_number)
     end
 
     vim.cmd("edit " .. comment_file)
+    -- Switch to insert mode to be ready to type the comment directly.
+    a.nvim_feedkeys(a.nvim_replace_termcodes("i", true, false, true), "n", false)
 
     local perform_comment = function()
         local str = buffer_to_string(comment_buf)
@@ -292,6 +294,20 @@ function M.comment_on_issue(issue_number)
             if win_split ~= 0 then
                 perform_comment()
                 win_split = 0
+
+                -- Trigger an update after already opening the issue in a window.
+                local opts = {}
+                local gh_call = M.fetch_issue_call(issue_number, opts)
+                local buf = find_existing_issue_buffer(issue_number)
+                vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+                    function(handle)
+                        if handle.code ~= 0 then
+                            print("Failed to retrieve issue content")
+                            P(handle)
+                            return
+                        end
+                        M.update_buffer_with_issue(handle.stdout, buf)
+                    end)
             end
         end
     })
@@ -549,6 +565,29 @@ local create_issue_window = function(buf, title_ui)
     })
 end
 
+function M.fetch_issue_call(issue_number, opts)
+    local required_fields =
+    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
+    local gh_call = { "gh", "issue", "view", issue_number, "--json", required_fields }
+    if opts.project then
+        table.insert(gh_call, "-R")
+        table.insert(gh_call, opts.project)
+    end
+    return gh_call
+end
+
+function M.update_buffer_with_issue(raw_json_response, buf)
+    vim.schedule(function()
+        local issue_json = vim.fn.json_decode(raw_json_response)
+        print("update single issue in buf: " .. tostring(buf))
+        buf = M.render_issue_to_buffer(buf, issue_json)
+
+        local title_ui = issue_title_ui(issue_json)
+        a.nvim_buf_set_name(buf, title_ui)
+        set_issue_buffer_options(buf)
+    end)
+end
+
 function M.view_issue(issue_number, opts)
     local buf = find_existing_issue_buffer(issue_number)
 
@@ -572,32 +611,7 @@ function M.view_issue(issue_number, opts)
         end)
     end
 
-    local update_buffer_with_issue = function(handle)
-        if handle.code ~= 0 then
-            print("Failed to retrieve issue content")
-            P(handle)
-            return
-        end
-        vim.schedule(function()
-            local data = vim.fn.json_decode(handle.stdout)
-
-            print("update single issue in buf: " .. tostring(buf))
-            buf = M.render_issue_to_buffer(buf, data)
-
-            local title_ui = issue_title_ui(data)
-            a.nvim_buf_set_name(buf, title_ui)
-            set_issue_buffer_options(buf)
-        end)
-    end
-
-    local required_fields =
-    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local gh_call = { "gh", "issue", "view", issue_number, "--json", required_fields }
-    if opts.project then
-        table.insert(gh_call, "-R")
-        table.insert(gh_call, opts.project)
-    end
-    P(gh_call)
+    local gh_call = M.fetch_issue_call(issue_number, opts)
 
     if buf == 0 then
         P("Issue not available as buffer - creating it new")
@@ -609,7 +623,15 @@ function M.view_issue(issue_number, opts)
         create_issue_window(buf, title_ui)
 
         -- Trigger an update after already opening the issue in a window.
-        vim.system(gh_call, { text = true, timeout = M.opts.timeout }, update_buffer_with_issue)
+        vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+            function(handle)
+                if handle.code ~= 0 then
+                    print("Failed to retrieve issue content")
+                    P(handle)
+                    return
+                end
+                M.update_buffer_with_issue(handle.stdout, buf)
+            end)
     end
 end
 
