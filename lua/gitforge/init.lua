@@ -79,21 +79,80 @@ local set_issue_buffer_options = function(buf)
     a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
     a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
 
-    a.nvim_buf_set_keymap(buf, "n", "<localleader>q", ":close<CR>",
-        { nowait = true, desc = "Close Issue", silent = true })
+    local key_opts_from_desc = function(description)
+        return { buffer = buf, nowait = true, desc = description, silent = true }
+    end
+    vim.keymap.set("n", "<localleader>q", ":close<CR>", key_opts_from_desc("Close Issue"))
+
     vim.keymap.set("n", "<localleader>c", function()
-            local issue_number = get_issue_id_from_buf(buf)
-            if issue_number == nil then
-                print("Failed to determine issue id to comment on")
-                return
-            end
-            M.comment_on_issue(issue_number)
+            vim.schedule(function()
+                local issue_number = get_issue_id_from_buf(buf)
+                if issue_number == nil then
+                    print("Failed to determine issue id to comment on")
+                    return
+                end
+                M.comment_on_issue(issue_number)
+            end)
         end,
-        { buffer = buf, nowait = true, desc = "Comment on Issue", silent = true })
+        key_opts_from_desc("Comment on Issue"))
+
     vim.keymap.set("n", "<localleader>u", function()
             M.update_issue_buffer(buf)
         end,
-        { buffer = buf, nowait = true, desc = "Update Issue", silent = true })
+        key_opts_from_desc("Update Issue"))
+
+    vim.keymap.set("n", "<localleader>t", function()
+            vim.schedule(function()
+                print("Change Title")
+                local curr_buf_content = a.nvim_buf_get_lines(buf, 0, 1, false)
+                local headline_markdown = curr_buf_content[1]
+                -- strip markdown header 1
+                local headline = headline_markdown:sub(3, -1)
+                vim.ui.input({ prompt = "Enter New Title: ", default = headline },
+                    function(input)
+                        if input == nil then
+                            print("Aborted input")
+                            return
+                        end
+                        if #input == 0 then
+                            print("Empty new Title is not allowed")
+                        end
+                        local handle_title_update = function(handle)
+                            vim.schedule(function()
+                                if handle.code ~= 0 then
+                                    print("Failed to update title")
+                                    return
+                                end
+                                print("Updated title")
+                                M.update_issue_buffer(buf)
+                            end)
+                        end
+                        local issue_number = get_issue_id_from_buf(buf)
+                        local gh_call = { "gh", "issue", "edit", issue_number, "--title", input }
+                        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+                            handle_title_update)
+                        call_handle:wait()
+                    end)
+            end)
+        end,
+        key_opts_from_desc("Change Title"))
+
+    vim.keymap.set("n", "<localleader>l", function()
+            print("Change Labels")
+            -- store previous labels
+            -- input(init with current labels)
+            -- remove all old labels
+            -- add all new labels
+            -- maybe be smart and make set difference
+        end,
+        key_opts_from_desc("Change Labels"))
+
+    vim.keymap.set("n", "<localleader>a", function()
+            print("Assign Issue")
+            -- input login name
+            -- assign
+        end,
+        key_opts_from_desc("Assign Issue"))
 end
 
 local buffer_to_string = function(buf)
@@ -634,7 +693,7 @@ function M.view_issue(issue_number, opts)
                     P(handle)
                     return
                 end
-                M.update_issue_buffer(buf)
+                vim.schedule(function() M.update_issue_buffer(buf) end)
             end)
     end
 end
