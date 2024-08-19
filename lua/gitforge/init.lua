@@ -90,6 +90,10 @@ local set_issue_buffer_options = function(buf)
             M.comment_on_issue(issue_number)
         end,
         { buffer = buf, nowait = true, desc = "Comment on Issue", silent = true })
+    vim.keymap.set("n", "<localleader>u", function()
+            M.update_issue_buffer(buf)
+        end,
+        { buffer = buf, nowait = true, desc = "Update Issue", silent = true })
 end
 
 local buffer_to_string = function(buf)
@@ -295,19 +299,8 @@ function M.comment_on_issue(issue_number)
                 perform_comment()
                 win_split = 0
 
-                -- Trigger an update after already opening the issue in a window.
-                local opts = {}
-                local gh_call = M.fetch_issue_call(issue_number, opts)
                 local buf = find_existing_issue_buffer(issue_number)
-                vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-                    function(handle)
-                        if handle.code ~= 0 then
-                            print("Failed to retrieve issue content")
-                            P(handle)
-                            return
-                        end
-                        M.update_buffer_with_issue(handle.stdout, buf)
-                    end)
+                M.update_issue_buffer(buf)
             end
         end
     })
@@ -576,16 +569,27 @@ function M.fetch_issue_call(issue_number, opts)
     return gh_call
 end
 
-function M.update_buffer_with_issue(raw_json_response, buf)
-    vim.schedule(function()
-        local issue_json = vim.fn.json_decode(raw_json_response)
-        print("update single issue in buf: " .. tostring(buf))
-        buf = M.render_issue_to_buffer(buf, issue_json)
+function M.update_issue_buffer(buf)
+    local opts = {}
+    local issue_number = get_issue_id_from_buf(buf)
+    local gh_call = M.fetch_issue_call(issue_number, opts)
+    vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+        function(handle)
+            if handle.code ~= 0 then
+                print("Failed to retrieve issue content")
+                P(handle)
+                return
+            end
+            vim.schedule(function()
+                local issue_json = vim.fn.json_decode(handle.stdout)
+                print("update single issue in buf: " .. tostring(buf))
+                buf = M.render_issue_to_buffer(buf, issue_json)
 
-        local title_ui = issue_title_ui(issue_json)
-        a.nvim_buf_set_name(buf, title_ui)
-        set_issue_buffer_options(buf)
-    end)
+                local title_ui = issue_title_ui(issue_json)
+                a.nvim_buf_set_name(buf, title_ui)
+                set_issue_buffer_options(buf)
+            end)
+        end)
 end
 
 function M.view_issue(issue_number, opts)
@@ -630,7 +634,7 @@ function M.view_issue(issue_number, opts)
                     P(handle)
                     return
                 end
-                M.update_buffer_with_issue(handle.stdout, buf)
+                M.update_issue_buffer(buf)
             end)
     end
 end
