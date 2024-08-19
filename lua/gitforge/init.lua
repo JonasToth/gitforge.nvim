@@ -231,7 +231,7 @@ function M.render_issue_to_buffer(buf, issue_json)
         a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(desc, '\n'))
     end
     if issue_json.comments ~= nil then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { '', '## Comments', '' })
+        a.nvim_buf_set_lines(buf, -1, -1, true, { '', '## Comments' })
         local comments = issue_json.comments
         if #comments == 0 then
             a.nvim_buf_set_lines(buf, -1, -1, true, { 'No comments' })
@@ -240,9 +240,8 @@ function M.render_issue_to_buffer(buf, issue_json)
                 local author = comment.author.login
                 local timestamp = comment.createdAt
                 local body = string.gsub(comment.body, "\r", "")
-                a.nvim_buf_set_lines(buf, -1, -1, true, { '`@' .. author .. '` at __' .. timestamp .. "__", '' })
-                a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(body, '\n'))
-                a.nvim_buf_set_lines(buf, -1, -1, true, { '', '---', '' })
+                a.nvim_buf_set_lines(buf, -1, -1, true, { '', '#### `@' .. author .. '` at __' .. timestamp .. "__", '' })
+                a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(body), '\n'))
             end
         end
     end
