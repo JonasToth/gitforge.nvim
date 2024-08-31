@@ -27,6 +27,10 @@ function M.setup(opts)
     end)
 
     vim.keymap.set("n", "<leader>qc", M.cached_issues_picker)
+
+    vim.keymap.set("n", "<leader>qa", function()
+        P(M.get_labels())
+    end)
 end
 
 function M.handle_command(opts)
@@ -68,6 +72,80 @@ local get_issue_id_from_buf = function(buf)
     for nbr in buf_name:gmatch("#(%d)") do
         return nbr
     end
+end
+
+local addToSet = function(set, key)
+    set[key] = true
+end
+
+local removeFromSet = function(set, key)
+    set[key] = nil
+end
+
+local setContains = function(set, key)
+    return set[key] ~= nil
+end
+
+---Computes @c set1 - set2
+---@param set1 table Keys are set values.
+---@param set2 table Keys are set values.
+---@return table Keys that are in @c set1 but not in @c set2
+---@sa addToSet(), setContains()
+local setDifference = function(set1, set2)
+    local result_set = {}
+    for key, _ in pairs(set1) do
+        if not setContains(set2, key) then
+            addToSet(result_set, key)
+        end
+    end
+    return result_set
+end
+
+---Create a set from a comma separated list of labels.
+---@param label_string string Comma separated list of labels.
+---@return table Keys are set elements.
+local createSetFromLabels = function(label_string)
+    local result_set = {}
+    for _, el in pairs(vim.split(label_string, ",")) do
+        addToSet(result_set, el)
+    end
+    return result_set
+end
+
+local flattenLabelSetToLabelList = function(label_set)
+    local label_table = {}
+    for key, _ in pairs(label_set) do
+        table.insert(label_table, key)
+    end
+    return vim.fn.join(label_table, ",")
+end
+
+function table.empty(self)
+    for _, _ in pairs(self) do
+        return false
+    end
+    return true
+end
+
+local create_label_update_command = function(new_label_input, previous_labels, buf)
+    local previous_labels_set = createSetFromLabels(previous_labels)
+    local new_labels_set = createSetFromLabels(new_label_input)
+    local removed_labels = setDifference(previous_labels_set, new_labels_set)
+    local new_labels = setDifference(new_labels_set, previous_labels_set)
+
+    local issue_number = get_issue_id_from_buf(buf)
+    local gh_call = { "gh", "issue", "edit", issue_number }
+
+    if not table.empty(removed_labels) then
+        table.insert(gh_call, "--remove-label")
+        table.insert(gh_call, flattenLabelSetToLabelList(removed_labels))
+    end
+
+    if not table.empty(new_labels) then
+        table.insert(gh_call, "--add-label")
+        table.insert(gh_call, flattenLabelSetToLabelList(new_labels))
+    end
+    return gh_call
 end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
@@ -138,12 +216,38 @@ local set_issue_buffer_options = function(buf)
         key_opts_from_desc("Change Title"))
 
     vim.keymap.set("n", "<localleader>l", function()
-            print("Change Labels")
-            -- store previous labels
-            -- input(init with current labels)
-            -- remove all old labels
-            -- add all new labels
-            -- maybe be smart and make set difference
+            vim.schedule(function()
+                local curr_buf_content = a.nvim_buf_get_lines(buf, 5, 6, false)
+                local label_line = curr_buf_content[1]
+                -- verify that the labels line is found
+                if label_line:sub(1, 7) ~= "Labels:" then
+                    print("Failed to query the labels from issue buffer. Error")
+                    return
+                end
+                -- extract all labels from the line
+                local previous_labels = label_line:sub(9, -1)
+                vim.ui.input({ prompt = "Enter New Labels: ", default = previous_labels },
+                    function(input)
+                        if input == nil then
+                            print("Aborted Issue Label Change")
+                            return
+                        end
+                        local gh_call = create_label_update_command(input, previous_labels, buf)
+                        local handle_label_update = function(handle)
+                            vim.schedule(function()
+                                if handle.code ~= 0 then
+                                    print("Failed to update labels")
+                                    return
+                                end
+                                print("Updated Labels")
+                                M.update_issue_buffer(buf)
+                            end)
+                        end
+                        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+                            handle_label_update)
+                        call_handle:wait()
+                    end)
+            end)
         end,
         key_opts_from_desc("Change Labels"))
 
@@ -153,6 +257,20 @@ local set_issue_buffer_options = function(buf)
             -- assign
         end,
         key_opts_from_desc("Assign Issue"))
+
+    vim.keymap.set("n", "<localleader>e", function()
+            print("Edit Issue Body")
+            -- open buffer, like when commenting
+            -- sending / changing the issue body one save-close
+        end,
+        key_opts_from_desc("Edit Issue Body"))
+
+    vim.keymap.set("n", "<localleader>s", function()
+            print("Edit State - Open/Close")
+            -- open buffer, like when commenting
+            -- sending / changing the issue body one save-close
+        end,
+        key_opts_from_desc("Edit State - Reopen/Close"))
 end
 
 local buffer_to_string = function(buf)
@@ -252,47 +370,33 @@ end
 
 -- Returns the issue labels of the current project.
 function M.get_labels()
-    local LabelList = {
-        labels = {},
-        descriptions = {},
-        colors = {},
-    }
+    local selected_labels = {}
     local on_choice = function(choice)
-        table.insert(LabelList, { selected_label = choice })
+        P(choice)
+        table.insert(selected_labels, choice)
     end
-    local on_exit = function(obj)
-        if obj.code ~= 0 then
-            print("Failed to query Labels: " .. obj.stderr)
+    local handle_labels = function(handle)
+        if handle.code ~= 0 then
+            print("Failed to query Labels: " .. handle.stderr)
             return
         end
-        local lines = {}
-        for s in obj.stdout:gmatch("[^\r\n]+") do
-            table.insert(lines, s)
+        vim.schedule(function ()
+        local label_list_json = vim.fn.json_decode(handle.stdout)
+        if label_list_json == nil then
+            print("Failed to parse JSON response for labels")
+            return
         end
-
-        for _, line in ipairs(lines) do
-            local colums = {}
-            for c in line:gmatch("[^\t]+") do
-                table.insert(colums, c)
-            end
-            for i, str in ipairs(colums) do
-                if i == 1 then
-                    table.insert(LabelList.labels, str)
-                elseif i == 2 then
-                    table.insert(LabelList.descriptions, str)
-                elseif i == 3 then
-                    table.insert(LabelList.colors, str)
-                end
-            end
-        end
-        vim.ui.select(LabelList.labels, { prompt = "Select Label" }, on_choice)
+        vim.ui.select(label_list_json, {
+            prompt = "Select Label",
+            format_item = function(label_element) return label_element["name"] end
+        }, on_choice)
+        end)
     end
-    local output = vim.system({ "gh", "label", "list" },
-        { text = true, timeout = M.opts.timeout },
-        on_exit)
+    local gh_call = { "gh", "label", "list", "--json", "name,color,description" }
+    local output = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_labels)
     output:wait()
-    P(LabelList)
-    return LabelList
+
+    return selected_labels
 end
 
 function M.create_issue()
@@ -431,7 +535,7 @@ function M.cached_issues_picker()
                         ts.utils.warn_no_selection "Missing Issue Selection"
                         return
                     end
-                    M.view_issue(selection.value.number, {
+                    M.view_issue(selection.value.issue_number, {
                         project = opts.project,
                     })
                 end)
