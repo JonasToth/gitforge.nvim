@@ -104,7 +104,7 @@ end
 ---Create a set from a comma separated list of labels.
 ---@param label_string string Comma separated list of labels.
 ---@return table Keys are set elements.
-local createSetFromLabels = function(label_string)
+local createSetFromCSVList = function(label_string)
     local result_set = {}
     for _, el in pairs(vim.split(label_string, ",")) do
         addToSet(result_set, el)
@@ -112,7 +112,7 @@ local createSetFromLabels = function(label_string)
     return result_set
 end
 
-local flattenLabelSetToLabelList = function(label_set)
+local flattenSetToCSVList = function(label_set)
     local label_table = {}
     for key, _ in pairs(label_set) do
         table.insert(label_table, key)
@@ -125,27 +125,6 @@ function table.empty(self)
         return false
     end
     return true
-end
-
-local create_label_update_command = function(new_label_input, previous_labels, buf)
-    local previous_labels_set = createSetFromLabels(previous_labels)
-    local new_labels_set = createSetFromLabels(new_label_input)
-    local removed_labels = setDifference(previous_labels_set, new_labels_set)
-    local new_labels = setDifference(new_labels_set, previous_labels_set)
-
-    local issue_number = get_issue_id_from_buf(buf)
-    local gh_call = { "gh", "issue", "edit", issue_number }
-
-    if not table.empty(removed_labels) then
-        table.insert(gh_call, "--remove-label")
-        table.insert(gh_call, flattenLabelSetToLabelList(removed_labels))
-    end
-
-    if not table.empty(new_labels) then
-        table.insert(gh_call, "--add-label")
-        table.insert(gh_call, flattenLabelSetToLabelList(new_labels))
-    end
-    return gh_call
 end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
@@ -195,21 +174,7 @@ local set_issue_buffer_options = function(buf)
                         if #input == 0 then
                             print("Empty new Title is not allowed")
                         end
-                        local handle_title_update = function(handle)
-                            vim.schedule(function()
-                                if handle.code ~= 0 then
-                                    print("Failed to update title")
-                                    return
-                                end
-                                print("Updated title")
-                                M.update_issue_buffer(buf)
-                            end)
-                        end
-                        local issue_number = get_issue_id_from_buf(buf)
-                        local gh_call = { "gh", "issue", "edit", issue_number, "--title", input }
-                        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-                            handle_title_update)
-                        call_handle:wait()
+                        M.change_title(buf, input)
                     end)
             end)
         end,
@@ -217,44 +182,37 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>l", function()
             vim.schedule(function()
-                local curr_buf_content = a.nvim_buf_get_lines(buf, 5, 6, false)
-                local label_line = curr_buf_content[1]
-                -- verify that the labels line is found
-                if label_line:sub(1, 7) ~= "Labels:" then
-                    print("Failed to query the labels from issue buffer. Error")
+                local previous_labels = M.get_labels_from_issue_buffer(buf)
+                if previous_labels == nil then
                     return
                 end
-                -- extract all labels from the line
-                local previous_labels = label_line:sub(9, -1)
                 vim.ui.input({ prompt = "Enter New Labels: ", default = previous_labels },
                     function(input)
                         if input == nil then
                             print("Aborted Issue Label Change")
                             return
                         end
-                        local gh_call = create_label_update_command(input, previous_labels, buf)
-                        local handle_label_update = function(handle)
-                            vim.schedule(function()
-                                if handle.code ~= 0 then
-                                    print("Failed to update labels")
-                                    return
-                                end
-                                print("Updated Labels")
-                                M.update_issue_buffer(buf)
-                            end)
-                        end
-                        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-                            handle_label_update)
-                        call_handle:wait()
+                        M.change_labels(buf, previous_labels, input)
                     end)
             end)
         end,
         key_opts_from_desc("Change Labels"))
 
     vim.keymap.set("n", "<localleader>a", function()
-            print("Assign Issue")
-            -- input login name
-            -- assign
+            vim.schedule(function()
+                local previous_assignee = M.get_assignee_from_issue_buffer(buf)
+                if previous_assignee == nil then
+                    return
+                end
+                vim.ui.input({ prompt = "Enter New Assignee(s): ", default = previous_assignee },
+                    function(input)
+                        if input == nil then
+                            print("Aborted Issue Assigning")
+                            return
+                        end
+                        M.change_assignees(buf, previous_assignee, input)
+                    end)
+            end)
         end,
         key_opts_from_desc("Assign Issue"))
 
@@ -330,6 +288,15 @@ function M.render_issue_to_buffer(buf, issue_json)
     else
         a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.closedAt .. ')' })
     end
+    local assignees = {}
+    for _, value in ipairs(issue_json.assignees) do
+        table.insert(assignees, value.login)
+    end
+    if #assignees > 0 then
+        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Assigned to: ' .. vim.fn.join(assignees, ',') })
+    else
+        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Assigned to: -' })
+    end
     local labels = {}
     for _, value in ipairs(issue_json.labels) do
         table.insert(labels, value.name)
@@ -368,6 +335,50 @@ function M.render_issue_to_buffer(buf, issue_json)
     return buf
 end
 
+---Return the comma separated list of labels from the issue buffer @c buf if possible.
+---@param buf number Buffer-ID for Issue.
+---@return string|nil Returns a comma separated list of labels on success, otherwise @c nil.
+function M.get_labels_from_issue_buffer(buf)
+    local curr_buf_content = a.nvim_buf_get_lines(buf, 6, 7, false)
+    local label_line = curr_buf_content[1]
+    if label_line == nil then
+        print("Failed to get label line from buffer " .. buf)
+        return nil;
+    end
+    -- verify that the labels line is found
+    if label_line:sub(1, 7) ~= "Labels:" then
+        print("Found Label line does not contain 'Labels:' at beginning of line, ERROR (line: " .. label_line .. ")")
+        return nil
+    end
+    -- extract all labels from the line
+    return label_line:sub(9, -1)
+end
+
+---Return the comma separated list of assignees from the issue buffer @c buf if possible.
+---@param buf number Buffer-ID for Issue.
+---@return string|nil Returns a comma separated list of assignees on success, otherwise @c nil.
+function M.get_assignee_from_issue_buffer(buf)
+    local curr_buf_content = a.nvim_buf_get_lines(buf, 5, 6, false)
+    local assignee_line = curr_buf_content[1]
+    if assignee_line == nil then
+        print("Failed to get assignee line from buffer " .. buf)
+        return nil;
+    end
+    -- verify that the labels line is found
+    if assignee_line:sub(1, 12) ~= "Assigned to:" then
+        print("Found assignee line does not contain 'Assigned to:' at beginning of line, ERROR (line: " ..
+            assignee_line .. ")")
+        return nil
+    end
+    -- extract all labels from the line
+    local assignees = assignee_line:sub(14, -1)
+    if assignees == "-" then
+        return ""
+    else
+        return assignees
+    end
+end
+
 -- Returns the issue labels of the current project.
 function M.get_labels()
     local selected_labels = {}
@@ -380,16 +391,16 @@ function M.get_labels()
             print("Failed to query Labels: " .. handle.stderr)
             return
         end
-        vim.schedule(function ()
-        local label_list_json = vim.fn.json_decode(handle.stdout)
-        if label_list_json == nil then
-            print("Failed to parse JSON response for labels")
-            return
-        end
-        vim.ui.select(label_list_json, {
-            prompt = "Select Label",
-            format_item = function(label_element) return label_element["name"] end
-        }, on_choice)
+        vim.schedule(function()
+            local label_list_json = vim.fn.json_decode(handle.stdout)
+            if label_list_json == nil then
+                print("Failed to parse JSON response for labels")
+                return
+            end
+            vim.ui.select(label_list_json, {
+                prompt = "Select Label",
+                format_item = function(label_element) return label_element["name"] end
+            }, on_choice)
         end)
     end
     local gh_call = { "gh", "label", "list", "--json", "name,color,description" }
@@ -585,7 +596,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                     table.insert(issue_labels, label.name)
                 end
                 local assignees = {}
-                if #entry.assignees then
+                if #entry.assignees == 0 then
                     table.insert(assignees, "unassigned")
                 else
                     for _, v in ipairs(entry.assignees) do
@@ -799,6 +810,110 @@ function M.view_issue(issue_number, opts)
                 vim.schedule(function() M.update_issue_buffer(buf) end)
             end)
     end
+end
+
+function M.change_title(buf, title_input)
+    local handle_title_update = function(handle)
+        vim.schedule(function()
+            if handle.code ~= 0 then
+                print("Failed to update title")
+                return
+            end
+            print("Updated title")
+            M.update_issue_buffer(buf)
+        end)
+    end
+    local issue_number = get_issue_id_from_buf(buf)
+    local gh_call = { "gh", "issue", "edit", issue_number, "--title", title_input }
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+        handle_title_update)
+    call_handle:wait()
+end
+
+local create_label_update_command = function(new_label_input, previous_labels, buf)
+    local previous_labels_set = createSetFromCSVList(previous_labels)
+    local new_labels_set = createSetFromCSVList(new_label_input)
+    local removed_labels = setDifference(previous_labels_set, new_labels_set)
+    local new_labels = setDifference(new_labels_set, previous_labels_set)
+
+    local issue_number = get_issue_id_from_buf(buf)
+    local gh_call = { "gh", "issue", "edit", issue_number }
+
+    if not table.empty(removed_labels) then
+        table.insert(gh_call, "--remove-label")
+        table.insert(gh_call, flattenSetToCSVList(removed_labels))
+    end
+
+    if not table.empty(new_labels) then
+        table.insert(gh_call, "--add-label")
+        table.insert(gh_call, flattenSetToCSVList(new_labels))
+    end
+    return gh_call
+end
+
+local create_assignee_update_command = function(new_assignees_input, previous_assignees, buf)
+    local previous_assignees_set = createSetFromCSVList(previous_assignees)
+    local new_assignees_set = createSetFromCSVList(new_assignees_input)
+    local removed_assignees = setDifference(previous_assignees_set, new_assignees_set)
+    local new_assignees = setDifference(new_assignees_set, previous_assignees_set)
+
+    local issue_number = get_issue_id_from_buf(buf)
+    local gh_call = { "gh", "issue", "edit", issue_number }
+
+    if not table.empty(removed_assignees) then
+        table.insert(gh_call, "--remove-assignee")
+        table.insert(gh_call, flattenSetToCSVList(removed_assignees))
+    end
+
+    if not table.empty(new_assignees) then
+        table.insert(gh_call, "--add-assignee")
+        table.insert(gh_call, flattenSetToCSVList(new_assignees))
+    end
+    return gh_call
+end
+
+---Changes the labels of issue in @c buf from comma-separated list in @c previous_labels to
+---comma separated list in @c new_labels
+---@param buf number Buffer-ID of the issue
+---@param previous_labels string comma separated list of the previous labels, used for set difference
+---@param new_labels string comma separated list of new labels, used for set difference
+function M.change_labels(buf, previous_labels, new_labels)
+    local gh_call = create_label_update_command(new_labels, previous_labels, buf)
+    local handle_label_update = function(handle)
+        vim.schedule(function()
+            if handle.code ~= 0 then
+                print("Failed to update labels")
+                return
+            end
+            print("Updated Labels")
+            M.update_issue_buffer(buf)
+        end)
+    end
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+        handle_label_update)
+    call_handle:wait()
+end
+
+---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to
+---comma separated list in @c new_labels
+---@param buf number Buffer-ID of the issue
+---@param previous_labels string comma separated list of the previous assignees, used for set difference
+---@param new_labels string comma separated list of new assignees, used for set difference
+function M.change_assignees(buf, previous_labels, new_labels)
+    local gh_call = create_assignee_update_command(new_labels, previous_labels, buf)
+    local handle_label_update = function(handle)
+        vim.schedule(function()
+            if handle.code ~= 0 then
+                print("Failed to update assignees")
+                return
+            end
+            print("Updated Assignees")
+            M.update_issue_buffer(buf)
+        end)
+    end
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
+        handle_label_update)
+    call_handle:wait()
 end
 
 return M
