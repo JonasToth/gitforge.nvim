@@ -221,8 +221,11 @@ local set_issue_buffer_options = function(buf)
         key_opts_from_desc("Assign Issue"))
 
     vim.keymap.set("n", "<localleader>e", function()
-            print("Edit Issue Body")
+            print("Edit Issue Description")
             -- parse out the description from the markers of the current buffer
+            -- NOTE: The last instance of '## Comments' must be found, because the issue content
+            --       could have this line itself!
+            --
             -- open new tmp buffer, like when commenting/creating
             -- sending / changing the issue body with body-file on save-close
         end,
