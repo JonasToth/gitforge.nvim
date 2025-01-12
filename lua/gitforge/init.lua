@@ -33,7 +33,7 @@ function M.setup(opts)
     end)
 
     vim.keymap.set("n", "<leader>qn", function()
-        M.create_issue()
+        M.create_issue(M.opts)
     end)
 end
 
@@ -222,15 +222,18 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>e", function()
             print("Edit Issue Body")
-            -- open buffer, like when commenting
-            -- sending / changing the issue body one save-close
+            -- parse out the description from the markers of the current buffer
+            -- open new tmp buffer, like when commenting/creating
+            -- sending / changing the issue body with body-file on save-close
         end,
         key_opts_from_desc("Edit Issue Body"))
 
     vim.keymap.set("n", "<localleader>s", function()
             print("Edit State - Open/Close")
-            -- open buffer, like when commenting
             -- sending / changing the issue body one save-close
+            -- Parse out the status of the issue
+            -- UI-Select for the next status
+            -- perform state transition
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
 end
@@ -352,7 +355,7 @@ function M.get_labels_from_issue_buffer(buf)
     -- verify that the labels line is found
     if label_line:sub(1, 7) ~= "Labels:" then
         print("Found Label line does not contain 'Labels:' at beginning of line, ERROR (line: " .. label_line .. ")")
-        return nil
+        return ""
     end
     -- extract all labels from the line
     return label_line:sub(9, -1)
@@ -417,16 +420,59 @@ end
 -- Creates a new issue by prompting for the title. The description is written in a new buffer.
 -- TODO: Provide a way to select labels directly on creation.
 --       Right now it needs to be done by editing the new issue.
-function M.create_issue()
+function M.create_issue(opts)
     local title
     local description_file
     local cleanup_description_file = function()
         print("Cleanup called")
         os.remove(description_file)
     end
-    local create_issue = function()
+    local show_issue_after_creation = function(handle)
+        cleanup_description_file()
+        if handle.code ~= 0 then
+            print("Failed to create issue: " .. handle.stderr)
+            return
+        end
+        vim.schedule(function()
+            local lines = vim.split(handle.stdout, "\n")
+            local issue_link
+            for index, value in ipairs(lines) do
+                if index == 1 then
+                    issue_link = value
+                    break
+                end
+            end
+            if issue_link == nil or #issue_link == 0 then
+                print("Failed to retrieve issue link for new issue")
+                P(lines)
+                return
+            end
+            local url_elements = vim.split(issue_link, "/")
+            local id
+            for index, value in ipairs(url_elements) do
+                if index == 7 then
+                    id = value
+                    break
+                end
+            end
+            if id == nil or #id == 0 then
+                print("Failed to extract issue id from URL")
+                P(url_elements)
+                return
+            end
+            local int_id = tonumber(id)
+            if int_id == nil then
+                print("Failed to parse id-string as int")
+                print(id)
+                return
+            end
+            M.view_issue(int_id, opts)
+        end)
+    end
+    local create_issue_call = function()
         print("Calling gh command for issue creation: " .. title .. " and " .. description_file)
-        vim.fn.system({ "gh", "issue", "create", "--title", title, "--body-file", description_file })
+        vim.system({ "gh", "issue", "create", "--title", title, "--body-file", description_file },
+            { text = true, timeout = opts.timeout }, show_issue_after_creation)
     end
     local write_description_in_tmp_buffer = function()
         description_file = os.tmpname()
@@ -462,14 +508,13 @@ function M.create_issue()
 
         local autocmdid
         autocmdid = a.nvim_create_autocmd("WinLeave", {
-            group = a.nvim_create_augroup("GitForge", { clear = true }),
+            -- group = a.nvim_create_augroup("GitForge", { clear = true }),
             callback = function()
                 print("Callback on WinLeave is called")
                 if win_split ~= 0 then
-                    create_issue()
+                    create_issue_call()
                     win_split = 0
                 end
-                cleanup_description_file()
                 a.nvim_del_autocmd(autocmdid)
             end
         })
@@ -479,7 +524,6 @@ function M.create_issue()
             return
         end
         title = input
-
         write_description_in_tmp_buffer()
     end
     vim.ui.input({ prompt = "Issue Title (esc or empty to abort): " }, continuation_after_title_prompt)
@@ -787,18 +831,21 @@ local create_issue_window = function(buf, title_ui)
     end
     -- Switch to normal mode - Telescope selection leaves in insert mode?!
     a.nvim_feedkeys(a.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
-    -- Automatically close then float when it is left.
-    local autocmdid
-    autocmdid = a.nvim_create_autocmd("WinLeave", {
-        group = a.nvim_create_augroup("GitForge", { clear = true }),
-        callback = function()
-            if win ~= 0 then
-                a.nvim_win_close(win, true)
-                win = 0
-            end
-            a.nvim_del_autocmd(autocmdid)
-        end
-    })
+    -- FIXME: This autocmd definition fails with vim.ui.input() Calls.
+    --        The window is closed, even though it should still exist.
+    --        Use <C-W>p to switch to the previous window if moving out of the float.
+    -- -- Automatically close then float when it is left.
+    -- local autocmdid
+    -- autocmdid = a.nvim_create_autocmd("WinLeave", {
+    --     -- group = a.nvim_create_augroup("GitForge", { clear = true }),
+    --     callback = function()
+    --         if win ~= 0 then
+    --             a.nvim_win_close(win, true)
+    --             win = 0
+    --         end
+    --         a.nvim_del_autocmd(autocmdid)
+    --     end
+    -- })
 end
 
 function M.fetch_issue_call(issue_number, opts)
