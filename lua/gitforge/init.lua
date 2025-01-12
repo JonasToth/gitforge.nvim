@@ -1,6 +1,8 @@
 local M = {}
 local a = vim.api
 local forge_issue_pattern = '[Issue] #'
+local g_description_headline_md = '## Description'
+local g_comments_headline_md = '## Comments'
 
 function M.setup(opts)
     M.opts = opts or {}
@@ -88,6 +90,24 @@ end
 
 local setContains = function(set, key)
     return set[key] ~= nil
+end
+
+local set_buffer_options_for_edit = function(buf)
+    a.nvim_set_option_value('readonly', false, { buf = buf })
+    a.nvim_set_option_value('modifiable', true, { buf = buf })
+    a.nvim_set_option_value('bufhidden', 'delete', { buf = buf })
+    a.nvim_set_option_value('buflisted', false, { buf = buf })
+    a.nvim_set_option_value('buftype', '', { buf = buf })
+    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
+    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+    a.nvim_set_option_value('swapfile', false, { buf = buf })
+end
+
+local open_edit_window = function(buf)
+    local win_split = a.nvim_open_win(buf, true, {
+        split = "below",
+    })
+    return win_split
 end
 
 ---Computes @c set1 - set2
@@ -222,6 +242,7 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>e", function()
             print("Edit Issue Description")
+            M.change_issue_description(buf, M.opts)
             -- parse out the description from the markers of the current buffer
             -- NOTE: The last instance of '## Comments' must be found, because the issue content
             --       could have this line itself!
@@ -319,17 +340,17 @@ function M.render_issue_to_buffer(buf, issue_json)
     --     a.nvim_buf_set_lines(buf, -1, -1, true, { 'Milestone: ' .. issue_json.milestone })
     -- end
 
-    a.nvim_buf_set_lines(buf, -1, -1, true, { '', '## Description', '' })
+    a.nvim_buf_set_lines(buf, -1, -1, true, { '', g_description_headline_md, '' })
     if #desc == 0 then
         a.nvim_buf_set_lines(buf, -1, -1, true, { 'No Description' })
     else
         a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(desc, '\n'))
     end
     if issue_json.comments ~= nil then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { '', '## Comments' })
+        a.nvim_buf_set_lines(buf, -1, -1, true, { '', g_comments_headline_md })
         local comments = issue_json.comments
         if #comments == 0 then
-            a.nvim_buf_set_lines(buf, -1, -1, true, { 'No comments' })
+            a.nvim_buf_set_lines(buf, -1, -1, true, { '', 'No comments' })
         else
             for _, comment in ipairs(comments) do
                 local author = comment.author.login
@@ -479,25 +500,16 @@ function M.create_issue(opts)
     end
     local write_description_in_tmp_buffer = function()
         description_file = os.tmpname()
-        local comment_buf = a.nvim_create_buf(false, false)
+        local buf = a.nvim_create_buf(false, false)
         print("Created buffer and tempfile for it")
-        if comment_buf == 0 then
+        if buf == 0 then
             print("Failed to create buffer to write the description.")
             return
         end
-        a.nvim_buf_set_name(comment_buf, description_file)
-        a.nvim_set_option_value('readonly', false, { buf = comment_buf })
-        a.nvim_set_option_value('modifiable', true, { buf = comment_buf })
-        a.nvim_set_option_value('bufhidden', 'delete', { buf = comment_buf })
-        a.nvim_set_option_value('buflisted', false, { buf = comment_buf })
-        a.nvim_set_option_value('buftype', '', { buf = comment_buf })
-        a.nvim_set_option_value('filetype', 'markdown', { buf = comment_buf })
-        a.nvim_set_option_value('syntax', 'markdown', { buf = comment_buf })
-        a.nvim_set_option_value('swapfile', false, { buf = comment_buf })
+        a.nvim_buf_set_name(buf, description_file)
+        set_buffer_options_for_edit(buf)
 
-        local win_split = a.nvim_open_win(comment_buf, true, {
-            split = "below",
-        })
+        local win_split = open_edit_window(buf)
         if win_split == 0 then
             print("Failed to create window split for writing the description.")
             return
@@ -536,27 +548,16 @@ function M.comment_on_issue(issue_number)
     local comment_file = os.tmpname()
     print("Tempfile for comment: " .. comment_file)
     local comment_buf = a.nvim_create_buf(false, false)
-    local cleanup = function()
-        os.remove(comment_file)
-    end
+    local cleanup = function() os.remove(comment_file) end
     if comment_buf == 0 then
         print("Failed to create buffer for commenting")
         cleanup()
         return
     end
     a.nvim_buf_set_name(comment_buf, comment_file)
-    a.nvim_set_option_value('readonly', false, { buf = comment_buf })
-    a.nvim_set_option_value('modifiable', true, { buf = comment_buf })
-    a.nvim_set_option_value('bufhidden', 'delete', { buf = comment_buf })
-    a.nvim_set_option_value('buflisted', false, { buf = comment_buf })
-    a.nvim_set_option_value('buftype', '', { buf = comment_buf })
-    a.nvim_set_option_value('filetype', 'markdown', { buf = comment_buf })
-    a.nvim_set_option_value('syntax', 'markdown', { buf = comment_buf })
-    a.nvim_set_option_value('swapfile', false, { buf = comment_buf })
+    set_buffer_options_for_edit(comment_buf)
 
-    local win_split = a.nvim_open_win(comment_buf, true, {
-        split = "below",
-    })
+    local win_split = open_edit_window(comment_buf)
     if win_split == 0 then
         print("Failed to create window split for commenting")
         cleanup()
@@ -591,6 +592,102 @@ function M.comment_on_issue(issue_number)
             end
             a.nvim_del_autocmd(autocmdid)
         end
+    })
+end
+
+---Called on an issue buffer. Parses out the current issue description, opens a new windows
+---with the previous description and allows editing it. After save-closing the window, the
+---description is updated on the issue.
+---@param opts table Project options
+function M.change_issue_description(buf, opts)
+    -- parse out the description from the markers of the current buffer
+    -- NOTE: The last instance of '## Comments' must be found, because the issue content
+    --       could have this line itself!
+    local issue_number = get_issue_id_from_buf(buf)
+    if issue_number == nil then
+        print("Failed to retrieve issue number for issue")
+        return
+    end
+    local full_issue_str = buffer_to_string(buf)
+    local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
+    if idx_start_of_desc_headline == nil then
+        print("Failed to find headline for description")
+        return
+    end
+
+    local idx_newline_after_description_headline = string.find(full_issue_str, "\n", idx_start_of_desc_headline)
+    if idx_newline_after_description_headline == nil then
+        print("Expected a newline character after headline string!")
+        return
+    else
+        -- Remove the two '\n' inserted after the headline.
+        idx_newline_after_description_headline = idx_newline_after_description_headline + 2
+    end
+    local idx_start_of_comments = string.find(full_issue_str, g_comments_headline_md,
+        idx_newline_after_description_headline, true)
+    if idx_start_of_comments == nil then
+        idx_start_of_comments = #full_issue_str
+    else
+        -- Remove the '\n#' of the headline and the final '\n' of the description.
+        idx_start_of_comments = idx_start_of_comments - 3
+    end
+    if idx_start_of_comments - idx_newline_after_description_headline < 2 then
+        print("Expected a greater distance between start of description and start of comments. Bug?!")
+        return
+    end
+    local parsed_description = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
+    P(parsed_description)
+
+    -- open new tmp buffer, like when commenting/creating
+    -- sending / changing the issue body with body-file on save-close
+    local tmp_desc_file = os.tmpname()
+    local descr_edit_buf = a.nvim_create_buf(false, false)
+    local cleanup = function() os.remove(tmp_desc_file) end
+    if descr_edit_buf == 0 then
+        print("Failed to create buffer to edit description")
+        cleanup()
+        return
+    end
+    a.nvim_buf_set_name(descr_edit_buf, tmp_desc_file)
+    if parsed_description ~= "No Description" then
+        a.nvim_buf_set_lines(descr_edit_buf, 0, -1, true, vim.split(parsed_description, '\n'))
+    else
+        parsed_description = ""
+    end
+    set_buffer_options_for_edit(descr_edit_buf)
+
+    local win_split = open_edit_window(descr_edit_buf)
+    if win_split == 0 then
+        print("Failed to create window to edit the description")
+        cleanup()
+        return
+    end
+
+    vim.cmd("write! " .. tmp_desc_file)
+    vim.cmd("edit " .. tmp_desc_file)
+
+    local edit_description = function()
+        local new_desc = buffer_to_string(descr_edit_buf)
+        print(new_desc)
+        if new_desc == parsed_description then
+            print("No update to the description occured.")
+        else
+            print("Description changed - updating on gitforge")
+            vim.fn.system({ "gh", "issue", "edit", issue_number, "--body-file", tmp_desc_file })
+        end
+        cleanup()
+    end
+    local autocmdid
+    autocmdid = a.nvim_create_autocmd("WinLeave", {
+        group = a.nvim_create_augroup("GitForge", { clear = true }),
+        callback = function()
+            if win_split ~= 0 then
+                edit_description()
+                win_split = 0
+                M.update_issue_buffer(buf)
+            end
+            a.nvim_del_autocmd(autocmdid)
+        end,
     })
 end
 
