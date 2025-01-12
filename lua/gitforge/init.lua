@@ -31,6 +31,10 @@ function M.setup(opts)
     vim.keymap.set("n", "<leader>qa", function()
         P(M.get_labels())
     end)
+
+    vim.keymap.set("n", "<leader>qn", function()
+        M.create_issue()
+    end)
 end
 
 function M.handle_command(opts)
@@ -410,13 +414,75 @@ function M.get_labels()
     return selected_labels
 end
 
+-- Creates a new issue by prompting for the title. The description is written in a new buffer.
+-- TODO: Provide a way to select labels directly on creation.
+--       Right now it needs to be done by editing the new issue.
 function M.create_issue()
-    local title = vim.fn.input({ prompt = "Issue Title: " })
+    local title
+    local description_file
+    local cleanup_description_file = function()
+        print("Cleanup called")
+        os.remove(description_file)
+    end
+    local create_issue = function()
+        print("Calling gh command for issue creation: " .. title .. " and " .. description_file)
+        vim.fn.system({ "gh", "issue", "create", "--title", title, "--body-file", description_file })
+    end
+    local write_description_in_tmp_buffer = function()
+        description_file = os.tmpname()
+        local comment_buf = a.nvim_create_buf(false, false)
+        print("Created buffer and tempfile for it")
+        if comment_buf == 0 then
+            print("Failed to create buffer to write the description.")
+            return
+        end
+        a.nvim_buf_set_name(comment_buf, description_file)
+        a.nvim_set_option_value('readonly', false, { buf = comment_buf })
+        a.nvim_set_option_value('modifiable', true, { buf = comment_buf })
+        a.nvim_set_option_value('bufhidden', 'delete', { buf = comment_buf })
+        a.nvim_set_option_value('buflisted', false, { buf = comment_buf })
+        a.nvim_set_option_value('buftype', '', { buf = comment_buf })
+        a.nvim_set_option_value('filetype', 'markdown', { buf = comment_buf })
+        a.nvim_set_option_value('syntax', 'markdown', { buf = comment_buf })
+        a.nvim_set_option_value('swapfile', false, { buf = comment_buf })
 
-    local title = "My New Issue"
-    local labels = vim.fn.input({ prompt = "Labels (comma separated): " })
+        local win_split = a.nvim_open_win(comment_buf, true, {
+            split = "below",
+        })
+        if win_split == 0 then
+            print("Failed to create window split for writing the description.")
+            return
+        end
 
-    vim.fn.system({ "gh", "issue", "create", "--title", title, "--label", labels })
+        print("Created win split for tmpfile buffer")
+
+        vim.cmd("edit " .. description_file)
+        -- Switch to insert mode to be ready to type the comment directly.
+        a.nvim_feedkeys(a.nvim_replace_termcodes("i", true, false, true), "n", false)
+
+        local autocmdid
+        autocmdid = a.nvim_create_autocmd("WinLeave", {
+            group = a.nvim_create_augroup("GitForge", { clear = true }),
+            callback = function()
+                print("Callback on WinLeave is called")
+                if win_split ~= 0 then
+                    create_issue()
+                    win_split = 0
+                end
+                cleanup_description_file()
+                a.nvim_del_autocmd(autocmdid)
+            end
+        })
+    end
+    local continuation_after_title_prompt = function(input)
+        if input == nil or input == "" then
+            return
+        end
+        title = input
+
+        write_description_in_tmp_buffer()
+    end
+    vim.ui.input({ prompt = "Issue Title (esc or empty to abort): " }, continuation_after_title_prompt)
 end
 
 function M.comment_on_issue(issue_number)
@@ -465,7 +531,8 @@ function M.comment_on_issue(issue_number)
         vim.fn.system({ "gh", "issue", "comment", issue_number, "--body-file", comment_file })
         cleanup()
     end
-    a.nvim_create_autocmd("WinLeave", {
+    local autocmdid
+    autocmdid = a.nvim_create_autocmd("WinLeave", {
         group = a.nvim_create_augroup("GitForge", { clear = true }),
         callback = function()
             if win_split ~= 0 then
@@ -475,6 +542,7 @@ function M.comment_on_issue(issue_number)
                 local buf = find_existing_issue_buffer(issue_number)
                 M.update_issue_buffer(buf)
             end
+            a.nvim_del_autocmd(autocmdid)
         end
     })
 end
@@ -720,13 +788,15 @@ local create_issue_window = function(buf, title_ui)
     -- Switch to normal mode - Telescope selection leaves in insert mode?!
     a.nvim_feedkeys(a.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
     -- Automatically close then float when it is left.
-    a.nvim_create_autocmd("WinLeave", {
+    local autocmdid
+    autocmdid = a.nvim_create_autocmd("WinLeave", {
         group = a.nvim_create_augroup("GitForge", { clear = true }),
         callback = function()
             if win ~= 0 then
                 a.nvim_win_close(win, true)
                 win = 0
             end
+            a.nvim_del_autocmd(autocmdid)
         end
     })
 end
