@@ -32,6 +32,7 @@ The most specific level of configuration takes precedence over the next higher l
     - using only `GitHub` for repositories should not require any configuration at all ?!
 - configuration should allow machine independence, especially the project matching is sensitive on
   this front
+- it should be less involved than `Neorg`
 
 ## Customizations
 

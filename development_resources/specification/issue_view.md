@@ -3,7 +3,7 @@
 The **Issue View** provides the content of a single issue. It serves as the interaction point with
 single issues, provides access to its comments and provides means to modify the issues.
 
-The underlying loading of the contents may happen through the [Issue Cache](spec_issue_cache.md)
+The underlying loading of the contents may happen through the [Issue Cache](issue_cache.md)
 
 ## Requirements
 
@@ -18,28 +18,35 @@ The underlying loading of the contents may happen through the [Issue Cache](spec
     - state (open, close, maybe more states like jira has)
     - labels
 - the issue is "rendered" in a markdown buffer
+    - markdown specific plugins handle aesthetics
 - all viewers of the issue should at least provide basic markdown hightlighting
     - telescope previewers
     - opening the buffer
-- issue interaction is available through key binding
-    - closing the view (q)
+- openening an issue opens a new window or tab, structurally different than the previous buffer
+    - the issue view should no hinder normal development and closing the view should lead back
+      directly to the previously open file/buffer
+- issue interaction is available through key binding (using `localleader`)
+    - updating the view to retrieve the latest state
+    - closing the view
     - adding a comment
-    - assigning the issue / unassigning the issue
-    - adding / removing label(s)
-    - adding / removing projects / milestones
-    - update the description
+    - changing the title
+    - changing assignee / unassigning the issue
+    - changing label(s)
+    - changing the description
     - changing the state (open -> close; close -> open; state transition ala jira)
-    - pin the issue which should persist its content locally
 
 ### Nice to Have
 
+- pin the issue which should persist its content locally
 - sorting comments by date ascending / descending
-- different strategies on how to open the issue view
+- configure different strategies on how to open the issue view
     - open a float
     - open a split
     - replace current buffer
     - "always open in left column" like a filesystem-tree viewer does
+    - integrate with [no-neck-pain.nvim](https://github.com/shortcuts/no-neck-pain.nvim)
 - auto-updating the issue content with a timer to make new comments available without user interaction
+- adding / removing projects / milestones
 
 ## Non-Functional Requirements
 
@@ -59,3 +66,4 @@ The underlying loading of the contents may happen through the [Issue Cache](spec
     - should be configurable on what to fold away by default
 - folding of `<detail>` sections (in comments)
 - folding of `hidden` comments
+- [foldtext.nvim](https://github.com/OXY2DEV/foldtext.nvim) seems a to be a fitting plugin for that

@@ -1,29 +1,60 @@
 # Where is this Going?
 
+### Ambitions
+
 In short, this plugin tries to provide access to
+
 - issues
 - pull requests
-- CI/CD
+- (maybe) CI/CD information
+
 for a variety of git forges, namely GitHub, GitLab, Jira (issues at least)/Bitbucket and maybe
-Gitea. The user interface should be the same for the different git forges.
+Gitea. The user interface should be the same for the different git forges. Practically, this
+plugin wraps CLI tools for each forge, even though it could interact with the API directly.
 
 The day-to-day interactions should be as fast as possible and not distract the user.
 Enabling at least basic offline work should be possible.
 
 The plugin should be well documented and the code easy to read.
 
+### Realities
+
+This is my first nvim plugin and I can only work on it in my free time. This project is a hobby
+and does not have highest priority for me.
+The code should be easy to read, but in reality I am figuring stuff out on the go.
+Github is the starting point and likely the driver on how things work. If a different forge
+has concepts that clash with Github, the Github way will likely win. But if I really need something
+to work differently and can't figure out how to do it without breaking something else, I will
+likely break things, even for Github.
+
+Changes are that I wont need to interact with BitBucket anymore in the future and I have no
+interaction with gitea. These forges are most likely to not work without external contributions.
+
+[jirac.nvim](https://github.com/janBorowy/jirac.nvim) exists and a specific Jira plugin will always win against this plugin.
+
 ## Near Goals 
 
 The goal of this plugin is to keep most daily developer interactions with the projects git forge
 within `nvim`. Especially quick actions like assigning an issue or writing a comment should not
 require a context switch to browser. It goes for functionality first, then customizability and
-finally asthetics.
+finally asthetics (maybe dev-icons are functionality though ;)).
 The heterogenity of the the various aspects (issues, code reviews/PRs, CI/CD) requires a modular
 structure to handle each aspect with a different "backend". The user interface _per aspect_ should
 be the same across different git forges. The module/feature set per git forge/backend may differ.
 
+- telescope integration for listing, previewing and selecting issues
+- "normal" issue interaction directly from `nvim`
+    - editing title, description, labels, assignee
+    - adding comments
+    - closing/reopening issues (or state transitions in general)
+- searching for issue
+- a bit of convenience, e.g. providing a way to custom query only issues with specific labels (bugs)
+- project, defined through path matching, specific options
+
 ## Far Goals
 
+- "pinning" issues such that they are kept as local files and can be accessed all the time
+- enabling offline work for issues
 - navigating between issues, like following a referenced issue (almost a near goal)
 - maybe notifications, but I personally don't like disturbances
     - e.g. getting new bugs may be useful for triage purposes
@@ -34,7 +65,6 @@ be the same across different git forges. The module/feature set per git forge/ba
 - some light project management tools, assigning issues to projects and stuff like that
 - maybe a dashboard (you can use `gh status` already)
 - maybe integration into [Neorg](https://github.com/nvim-neorg/neorg), like a summary in the index and navigation to the issues
-- maybe simple time tracking or at least a way to add time taken to an issue
 - creating queues for changes done during offline work that would be synced back at the next
   possible occassion
 

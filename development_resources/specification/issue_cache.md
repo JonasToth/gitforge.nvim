@@ -26,7 +26,7 @@ persistent cache.
     - the "primary key" is likely "owner__project__issue_number"
 - working with at least persisted issues must still work during interrupted connectivity to the
   git forge (lack of network, downtime of the forge)
-- the [issue list](spec_issue_list.md) must still work with the cached/persisted issues
+- the [issue list](issue_list.md) must still work with the cached/persisted issues
 
 ### Nice to Have
 
@@ -39,4 +39,4 @@ persistent cache.
 
 ## Customizations
 
-- directory path for the persistent cache
+- directory path for the persistent cache, by default in `nvim-data`

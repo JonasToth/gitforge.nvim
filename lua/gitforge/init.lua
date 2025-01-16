@@ -75,7 +75,7 @@ local get_issue_id_from_buf = function(buf)
     if string.find(buf_name, "[Issue]", 1, true) == nil then
         return nil
     end
-    for nbr in buf_name:gmatch("#(%d)") do
+    for nbr in buf_name:gmatch("#(%d+)") do
         return nbr
     end
 end
@@ -264,7 +264,7 @@ end
 
 local buffer_to_string = function(buf)
     local curr_buf_content = a.nvim_buf_get_lines(buf, 0, -1, false)
-    return vim.fn.join(curr_buf_content, "\n")
+    return vim.trim(vim.fn.join(curr_buf_content, "\n"))
 end
 
 local copy_buffer = function(from_buf, to_buf)
@@ -344,7 +344,7 @@ function M.render_issue_to_buffer(buf, issue_json)
     if #desc == 0 then
         a.nvim_buf_set_lines(buf, -1, -1, true, { 'No Description' })
     else
-        a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(desc, '\n'))
+        a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(desc), '\n'))
     end
     if issue_json.comments ~= nil then
         a.nvim_buf_set_lines(buf, -1, -1, true, { '', g_comments_headline_md })
@@ -915,6 +915,7 @@ local create_issue_window = function(buf, title_ui)
     local row = math.ceil(vim.o.lines - height) * 0.5 - 1
     local col = math.ceil(vim.o.columns - width) * 0.5 - 1
     local win_options = {
+        -- 'relative' creates a floating window
         relative = 'editor',
         title = title_ui,
         title_pos = 'center',
