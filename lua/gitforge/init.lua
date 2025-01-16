@@ -241,23 +241,12 @@ local set_issue_buffer_options = function(buf)
         key_opts_from_desc("Assign Issue"))
 
     vim.keymap.set("n", "<localleader>e", function()
-            print("Edit Issue Description")
             M.change_issue_description(buf, M.opts)
-            -- parse out the description from the markers of the current buffer
-            -- NOTE: The last instance of '## Comments' must be found, because the issue content
-            --       could have this line itself!
-            --
-            -- open new tmp buffer, like when commenting/creating
-            -- sending / changing the issue body with body-file on save-close
         end,
         key_opts_from_desc("Edit Issue Body"))
 
     vim.keymap.set("n", "<localleader>s", function()
-            print("Edit State - Open/Close")
-            -- sending / changing the issue body one save-close
-            -- Parse out the status of the issue
-            -- UI-Select for the next status
-            -- perform state transition
+            M.change_issue_state(buf, M.opts)
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
 end
@@ -367,8 +356,8 @@ function M.render_issue_to_buffer(buf, issue_json)
 end
 
 ---Return the comma separated list of labels from the issue buffer @c buf if possible.
----@param buf number Buffer-ID for Issue.
----@return string|nil Returns a comma separated list of labels on success, otherwise @c nil.
+---@param buf number Buffer-ID for issue.
+---@return string|nil labels a comma separated list of labels on success, otherwise @c nil.
 function M.get_labels_from_issue_buffer(buf)
     local curr_buf_content = a.nvim_buf_get_lines(buf, 6, 7, false)
     local label_line = curr_buf_content[1]
@@ -383,6 +372,25 @@ function M.get_labels_from_issue_buffer(buf)
     end
     -- extract all labels from the line
     return label_line:sub(9, -1)
+end
+
+---Return the string of the current state of the issue buffer @c buf if possible.
+---@param buf number Buffer-Id for the issue
+---@return string|nil status String representation of the issue status if found,  otherwise @c nil.
+function M.get_status_from_issue_buffer(buf)
+    local curr_buf_content = a.nvim_buf_get_lines(buf, 4, 5, false)
+    print(curr_buf_content)
+    local status_line = curr_buf_content[1]
+    if status_line == nil then
+        print("Failed to get status line from buffer " .. buf)
+        return nil;
+    end
+    local extracted_status = string.match(status_line, "^Status: (.+) %(")
+    if extracted_status == nil then
+        print("Failed to extract status from buffer " .. buf .. " and supposed state line " .. status_line)
+        return nil
+    end
+    return vim.trim(extracted_status)
 end
 
 ---Return the comma separated list of assignees from the issue buffer @c buf if possible.
@@ -600,9 +608,11 @@ end
 ---description is updated on the issue.
 ---@param opts table Project options
 function M.change_issue_description(buf, opts)
-    -- parse out the description from the markers of the current buffer
-    -- NOTE: The last instance of '## Comments' must be found, because the issue content
-    --       could have this line itself!
+    -- FIXME: The last instance of '## Comments' must be found, because the issue content
+    --        could have this line itself! The problem is, that comments themself might have
+    --        this line contained. So the last instance is wrong. Somewhere in between "smart".
+    --        The solution is likely just using a weird '## Comments' headline in rendering ...
+    print("Edit Issue Description")
     local issue_number = get_issue_id_from_buf(buf)
     if issue_number == nil then
         print("Failed to retrieve issue number for issue")
@@ -668,7 +678,6 @@ function M.change_issue_description(buf, opts)
 
     local edit_description = function()
         local new_desc = buffer_to_string(descr_edit_buf)
-        print(new_desc)
         if new_desc == parsed_description then
             print("No update to the description occured.")
         else
@@ -689,6 +698,40 @@ function M.change_issue_description(buf, opts)
             a.nvim_del_autocmd(autocmdid)
         end,
     })
+end
+
+function M.change_issue_state(buf, opts)
+    print("Edit State - Open/Close")
+    local issue_number = get_issue_id_from_buf(buf)
+    local issue_status = M.get_status_from_issue_buffer(buf)
+
+    local compute_possible_next_states = function(current_state)
+        if current_state == "OPEN" then
+            return { "CLOSED completed", "CLOSED not planned", current_state }
+        else
+            return { "REOPEN", current_state }
+        end
+    end
+    local list_of_next_stati = compute_possible_next_states(issue_status)
+    vim.ui.select(list_of_next_stati, { prompt = "Select new issue state:", },
+        function(choice)
+            if issue_status == choice then
+                print("Issue state did not change")
+                return
+            end
+            print("From " .. issue_status .. " to " .. choice)
+            if choice == "CLOSED completed" then
+                vim.fn.system({ "gh", "issue", "close", issue_number, "--reason", "completed" })
+            elseif choice == "CLOSED not planned" then
+                vim.fn.system({ "gh", "issue", "close", issue_number, "--reason", "not planned" })
+            elseif choice == "REOPEN" then
+                vim.fn.system({ "gh", "issue", "reopen", issue_number })
+            else
+                print("Unexpected next state occured. Performing no update!")
+                return
+            end
+            M.update_issue_buffer(buf)
+        end)
 end
 
 function M.cached_issues_picker()

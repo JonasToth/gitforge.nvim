@@ -37,6 +37,18 @@ Please call `:checkhealth gitforge` to see if any issues are detected by the plu
 > ```
 > You can change your working directory in `nvim` with the `:cd path/to/new/directory` command.
 
+## Plugins that will improve the user experience
+
+- [markview.nvim](https://github.com/OXY2DEV/markview.nvim) or [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) for markdown visualization
+- [neogit](https://github.com/NeogitOrg/neogit) for direct `git` interaction
+- [snacks.nvim](https://github.com/folke/snacks.nvim) for better input
+- [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) to quickly execute commands directly
+
+## Plugins you might want to use instead
+
+- [jirac.nvim](https://github.com/janBorowy/jirac.nvim)
+- [gitlab.nvim](https://github.com/harrisoncramer/gitlab.nvim)
+
 ## Status
 
 ### General Capabilities
@@ -51,11 +63,13 @@ Please call `:checkhealth gitforge` to see if any issues are detected by the plu
     - [x] Creating an issue
     - [x] Editing a single issue
     - [x] Commenting on an issue
+    - [ ] Closing and Reopening an issue
 - [ ] GitLab (using `glab` cli)
     - [ ] Listing Issues via `telescope.nvim`
     - [ ] Creating an issue
     - [ ] Editing a single issue
     - [ ] Commenting on an issue
+    - [ ] Closing and Reopening an issue
 
 ### Pull Requests
 
