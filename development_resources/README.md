@@ -15,29 +15,32 @@ plugin wraps CLI tools for each forge, even though it could interact with the AP
 The day-to-day interactions should be as fast as possible and not distract the user.
 Enabling at least basic offline work should be possible.
 
-The plugin should be well documented and the code easy to read.
+The plugin should be well documented and the code easy to read. Tests are great to have, too!
 
 ### Realities
 
 This is my first nvim plugin and I can only work on it in my free time. This project is a hobby
 and does not have highest priority for me.
 The code should be easy to read, but in reality I am figuring stuff out on the go.
-Github is the starting point and likely the driver on how things work. If a different forge
-has concepts that clash with Github, the Github way will likely win. But if I really need something
-to work differently and can't figure out how to do it without breaking something else, I will
-likely break things, even for Github.
+Github is the starting point and likely the driver on how things are going to work.
+If a different forge has concepts that clash with Github, the Github-way will likely win.
+But if I really need something to work differently and can't figure out how to do it without
+breaking something else, I will likely break things. This could happen to Github if I need GitLab
+more than Github.
 
-Changes are that I wont need to interact with BitBucket anymore in the future and I have no
-interaction with gitea. These forges are most likely to not work without external contributions.
+Chances are that I won't need to interact with Bitbucket anymore in the future and I have no
+interaction with gitea. These forges will most likely not work without external contributions.
 
 [jirac.nvim](https://github.com/janBorowy/jirac.nvim) exists and a specific Jira plugin will always win against this plugin.
 
 ## Near Goals 
 
-The goal of this plugin is to keep most daily developer interactions with the projects git forge
+The goal of this plugin is to keep most daily developer interactions with the project's git forge
 within `nvim`. Especially quick actions like assigning an issue or writing a comment should not
-require a context switch to browser. It goes for functionality first, then customizability and
-finally asthetics (maybe dev-icons are functionality though ;)).
+require a context switch to the browser.
+The plugin goes for functionality first, then customizability and finally asthetics
+(maybe dev-icons are functionality though ;)).
+
 The heterogenity of the the various aspects (issues, code reviews/PRs, CI/CD) requires a modular
 structure to handle each aspect with a different "backend". The user interface _per aspect_ should
 be the same across different git forges. The module/feature set per git forge/backend may differ.
@@ -50,6 +53,7 @@ be the same across different git forges. The module/feature set per git forge/ba
 - searching for issue
 - a bit of convenience, e.g. providing a way to custom query only issues with specific labels (bugs)
 - project, defined through path matching, specific options
+- get both Github and GitLab working
 
 ## Far Goals
 
@@ -68,6 +72,13 @@ be the same across different git forges. The module/feature set per git forge/ba
 - creating queues for changes done during offline work that would be synced back at the next
   possible occassion
 
+## Stretch Goals
+
+- maybe an LSP?
+    - jumping to the issue, even if viewing the commit message in `neogit`
+    - jumping between issues in general
+    - providing suggestions for names
+
 ## Non-Goals
 
 - providing advanced project management or development planning tools
@@ -80,7 +91,7 @@ be the same across different git forges. The module/feature set per git forge/ba
     - extending existing tools with missing features is OK, but I won't do it
     - in the late stages of features, the last bit of information integration may need an API
       request, best case, the CLI tool in question already provides means for that
-- parsing `git` repositories, please use a proper `git` plugin like [Neogit](https://github.com/NeogitOrg/neogit)
+- parsing `git` repositories, please use a proper `git` plugin like [neogit](https://github.com/NeogitOrg/neogit)
 
 ## Motivation
 
@@ -98,8 +109,8 @@ Advice, help and suggestions are always welcome!
 ## Definition of Done
 
 Version 1.0 is when I can perform day to day work with issues, pull requests and CI/CD interaction
-with GitHub, Bitbucket and Jira. Other git forges (especially if providing a CLI tool) may be
-integrated but are second class citizens. Why? Because I don't use them.
+with GitHub, Bitbucket (or GitLab) and Jira. Other git forges (especially if providing a CLI tool)
+may be integrated but are second class citizens. Why? Because I don't use them.
 If anyone has stakes into something else, go ahead and support me :)
 
 All features extending this base line may be developed at a much slower pace and may never
