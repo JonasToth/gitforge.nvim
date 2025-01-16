@@ -31,7 +31,7 @@ function M.setup(opts)
     vim.keymap.set("n", "<leader>qc", M.cached_issues_picker)
 
     vim.keymap.set("n", "<leader>qa", function()
-        P(M.get_labels())
+        M.get_labels()
     end)
 
     vim.keymap.set("n", "<leader>qn", function()
@@ -325,7 +325,6 @@ function M.render_issue_to_buffer(buf, issue_json)
         a.nvim_buf_set_lines(buf, -1, -1, true, { 'Labels: ' .. vim.fn.join(labels, ',') })
     end
     -- if issue_json.milestone ~= vim.NIL then
-    --     P(issue_json.milestone)
     --     a.nvim_buf_set_lines(buf, -1, -1, true, { 'Milestone: ' .. issue_json.milestone })
     -- end
 
@@ -422,7 +421,7 @@ end
 function M.get_labels()
     local selected_labels = {}
     local on_choice = function(choice)
-        P(choice)
+        print(choice)
         table.insert(selected_labels, choice)
     end
     local handle_labels = function(handle)
@@ -476,7 +475,7 @@ function M.create_issue(opts)
             end
             if issue_link == nil or #issue_link == 0 then
                 print("Failed to retrieve issue link for new issue")
-                P(lines)
+                print(lines)
                 return
             end
             local url_elements = vim.split(issue_link, "/")
@@ -489,7 +488,7 @@ function M.create_issue(opts)
             end
             if id == nil or #id == 0 then
                 print("Failed to extract issue id from URL")
-                P(url_elements)
+                print(url_elements)
                 return
             end
             local int_id = tonumber(id)
@@ -646,7 +645,7 @@ function M.change_issue_description(buf, opts)
         return
     end
     local parsed_description = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
-    P(parsed_description)
+    print(parsed_description)
 
     -- open new tmp buffer, like when commenting/creating
     -- sending / changing the issue body with body-file on save-close
@@ -767,7 +766,7 @@ function M.cached_issues_picker()
         table.insert(buffers, element)
     end
 
-    P(buffers)
+    print(buffers)
     pickers
         .new({}, {
             prompt_title = "Issue Buffers",
@@ -943,7 +942,7 @@ function M.list_issues(opts)
         table.insert(gh_call, "--assignee")
         table.insert(gh_call, opts.assignee)
     end
-    P(gh_call)
+    print(gh_call)
     local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_telescope_list)
     call_handle:wait()
 end
@@ -1011,7 +1010,7 @@ function M.update_issue_buffer(buf)
         function(handle)
             if handle.code ~= 0 then
                 print("Failed to retrieve issue content")
-                P(handle)
+                print(handle)
                 return
             end
             vim.schedule(function()
@@ -1032,7 +1031,7 @@ function M.view_issue(issue_number, opts)
     local open_buffer_with_issue = function(handle)
         if handle.code ~= 0 then
             print("Failed to retrieve issue content")
-            P(handle)
+            print(handle)
             return
         end
         vim.schedule(function()
@@ -1052,11 +1051,11 @@ function M.view_issue(issue_number, opts)
     local gh_call = M.fetch_issue_call(issue_number, opts)
 
     if buf == 0 then
-        P("Issue not available as buffer - creating it new")
+        print("Issue not available as buffer - creating it new")
         local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
         call_handle:wait()
     else
-        P("Found issue in buffer - displaying old state and triggering update")
+        print("Found issue in buffer - displaying old state and triggering update")
         local title_ui = a.nvim_buf_get_name(buf)
         create_issue_window(buf, title_ui)
 
@@ -1065,7 +1064,6 @@ function M.view_issue(issue_number, opts)
             function(handle)
                 if handle.code ~= 0 then
                     print("Failed to retrieve issue content")
-                    P(handle)
                     return
                 end
                 vim.schedule(function() M.update_issue_buffer(buf) end)
