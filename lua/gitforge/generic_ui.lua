@@ -1,4 +1,4 @@
-M = {}
+local GenericUI = {}
 
 local set_buffer_options_for_edit = function(buf)
     vim.api.nvim_set_option_value('readonly', false, { buf = buf })
@@ -13,7 +13,7 @@ end
 
 ---Opens a window split below and sets the provided buffer up for editing it.
 ---@return integer window ID of the new window.
-function M.open_edit_window(buf)
+function GenericUI.open_edit_window(buf)
     set_buffer_options_for_edit(buf)
     local win_split = vim.api.nvim_open_win(buf, true, {
         split = "below",
@@ -25,7 +25,7 @@ end
 ---Creates an autocommand to close the floating window if it looses focus.
 ---@param buf number Buffer-ID to display in the window.
 ---@param title_ui string Human Readable title for the window.
-function M.create_issue_window(buf, title_ui)
+function GenericUI.create_issue_window(buf, title_ui)
     local width = math.ceil(math.min(vim.o.columns, math.min(100, vim.o.columns - 20)))
     local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
     local row = math.ceil(vim.o.lines - height) * 0.5 - 1
@@ -69,9 +69,9 @@ end
 local forge_issue_pattern = '[Issue] #'
 
 --- Returns the standardized title of an issue.
---- @param issue_json table Table representation of the issue JSON.
+--- @param issue_json Issue Table representation of the issue JSON.
 --- @return string title concatenation of issue number and a shortened title.
-function M.issue_title_ui(issue_json)
+function GenericUI.issue_title_ui(issue_json)
     local length_threshold = 50
     local shortened_title = string.sub(issue_json.title, 1, length_threshold)
     local title_id = forge_issue_pattern .. tostring(issue_json.number)
@@ -80,10 +80,13 @@ function M.issue_title_ui(issue_json)
 end
 
 ---Finds an existing buffer that holds @c issue_number.
----@param issue_number number
+---@param issue_number string|nil
 ---@return integer buf_id if a matching buffer is found, otherwise @c 0
-function M.find_existing_issue_buffer(issue_number)
-    local title_id = forge_issue_pattern .. tostring(issue_number)
+function GenericUI.find_existing_issue_buffer(issue_number)
+    if issue_number == nil then
+        return 0
+    end
+    local title_id = forge_issue_pattern .. issue_number
     local all_bufs = vim.api.nvim_list_bufs()
 
     for _, buf_id in pairs(all_bufs) do
@@ -96,4 +99,66 @@ function M.find_existing_issue_buffer(issue_number)
     return 0
 end
 
-return M
+---@param provider GHIssue
+---@param completion function|nil
+function GenericUI.refresh_issue(provider, completion)
+    local log = require("gitforge.log")
+    local command = provider:cmd_fetch()
+
+    log.executed_command(command)
+    --TODO: Provide proper options
+    return vim.system(command, { text = true, timeout = 5000 },
+        function(handle)
+            if handle.code ~= 0 then
+                -- log.notify_failure("Failed to retrieve issue content")
+                print("Failed to retrieve issue content")
+                return
+            end
+            vim.schedule(function()
+                local issue = provider:convert_cmd_result_to_issue(handle.stdout)
+                log.trace_msg("update single issue in buf: " .. tostring(provider.buf))
+                provider.buf = require("gitforge.generic_issue").render_issue_to_buffer(provider.buf, issue)
+
+                local title_ui = require("gitforge.generic_ui").issue_title_ui(issue)
+                vim.api.nvim_buf_set_name(provider.buf, title_ui)
+                require("gitforge").set_issue_buffer_options(provider)
+                log.ephemeral_info("Updated content for issue " .. provider.issue_number)
+
+                if completion ~= nil then
+                    completion(provider, issue)
+                end
+            end)
+        end)
+end
+
+---Blocking call to update the issue on the git forge and update the local content.
+---@param provider GHIssue Implementation for command generation.
+---@param command_generator function Generate the command to execute.
+function GenericUI.perform_issue_update_cmd(provider, command_generator)
+    local log = require("gitforge.log")
+
+    local command = command_generator(provider)
+    if command == nil then
+        log.notify_failure("Failed to create command to update issue!")
+        return
+    end
+    local handle_cmd_completion = function(handle)
+        vim.schedule(function()
+            if handle.code ~= 0 then
+                --TODO: Better error logging
+                vim.api.nvim_err_write(handle.stderr)
+                vim.api.nvim_err_write(handle.stdout)
+                log.notify_failure("Failed to update issue!")
+                return
+            end
+            log.notify_change("Updated Issue")
+            GenericUI.refresh_issue(provider)
+        end)
+    end
+    log.executed_command(command)
+    --TODO: Provide proper options.
+    local call_handle = vim.system(command, { text = true, timeout = 5000 }, handle_cmd_completion)
+    call_handle:wait()
+end
+
+return GenericUI

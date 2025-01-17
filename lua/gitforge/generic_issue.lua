@@ -1,4 +1,4 @@
-local M = {}
+local GenericIssue = {}
 
 require("gitforge.set")
 
@@ -17,7 +17,7 @@ require("gitforge.set")
 ---@field createdAt string ISO-8601 formatted UTC time of the comment time.
 ---@field body string Content of the comment.
 
----Define the used interface of the JSON contents of an issue. The content 
+---Define the used interface of the JSON contents of an issue. The content
 ---is translated into lua tables.
 ---@class Issue
 ---@field body string Holds the description of the issue as markdown string.
@@ -37,44 +37,47 @@ local g_comments_headline_md = '## Comments'
 
 --- Renders the issue content into a buffer as markdown.
 --- @param buf integer Buffer-Id to work on. If `nil`, a new buffer is created.
---- @param issue_json Issue Table of JSON data.
+--- @param issue Issue Table of JSON data.
 --- @return integer number of the buffer. Can be `0` if creation failed.
-function M.render_issue_to_buffer(buf, issue_json)
+function GenericIssue.render_issue_to_buffer(buf, issue)
     local log = require("gitforge.log")
     log.trace_msg("Rendering Issue to buffer " .. buf)
-    if issue_json == nil then
+    if issue == nil then
         return buf
     end
 
     if buf == 0 then
         buf = vim.api.nvim_create_buf(true, false)
     end
+
     if buf == 0 then
         log.notify_failure("Failed to create buffer to view issues")
         return 0
     end
 
-    local desc = string.gsub(issue_json.body, "\r", "")
+    local desc = string.gsub(issue.body, "\r", "")
     vim.api.nvim_set_option_value('modifiable', true, { buf = buf })
     vim.api.nvim_set_option_value('readonly', false, { buf = buf })
     vim.api.nvim_set_option_value('buftype', 'nofile', { buf = buf })
     vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
 
-    vim.api.nvim_buf_set_lines(buf, 0, -1, true, { '# ' .. issue_json.title, '' })
+    vim.api.nvim_buf_set_lines(buf, 0, -1, true, { '# ' .. issue.title, '' })
     local realName = ''
-    if issue_json.author and issue_json.author.name then
-        realName = '(' .. issue_json.author.name .. ') '
+    if issue.author and issue.author.name then
+        realName = '(' .. issue.author.name .. ') '
     end
-    vim.api.nvim_buf_set_lines(buf, -1, -1, true, { 'Number: #' .. issue_json.number })
+    vim.api.nvim_buf_set_lines(buf, -1, -1, true, { 'Number: #' .. issue.number })
     vim.api.nvim_buf_set_lines(buf, -1, -1, true,
-        { 'Created by `@' .. issue_json.author.login .. '` ' .. realName .. 'at ' .. issue_json.createdAt })
-    if not issue_json.closed then
-        vim.api.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.createdAt .. ')' })
+        { 'Created by `@' .. issue.author.login .. '` ' .. realName .. 'at ' .. issue.createdAt })
+    if not issue.closed then
+        vim.api.nvim_buf_set_lines(buf, -1, -1, true,
+            { 'Status: ' .. issue.state .. ' (' .. issue.createdAt .. ')' })
     else
-        vim.api.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.closedAt .. ')' })
+        vim.api.nvim_buf_set_lines(buf, -1, -1, true,
+            { 'Status: ' .. issue.state .. ' (' .. issue.closedAt .. ')' })
     end
     local assignees = {}
-    for _, value in ipairs(issue_json.assignees) do
+    for _, value in ipairs(issue.assignees) do
         table.insert(assignees, value.login)
     end
     if #assignees > 0 then
@@ -83,7 +86,7 @@ function M.render_issue_to_buffer(buf, issue_json)
         vim.api.nvim_buf_set_lines(buf, -1, -1, true, { 'Assigned to: -' })
     end
     local labels = {}
-    for _, value in ipairs(issue_json.labels) do
+    for _, value in ipairs(issue.labels) do
         table.insert(labels, value.name)
     end
     if #labels > 0 then
@@ -99,9 +102,9 @@ function M.render_issue_to_buffer(buf, issue_json)
     else
         vim.api.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(desc), '\n'))
     end
-    if issue_json.comments ~= nil then
+    if issue.comments ~= nil then
         vim.api.nvim_buf_set_lines(buf, -1, -1, true, { '', g_comments_headline_md })
-        local comments = issue_json.comments
+        local comments = issue.comments
         if #comments == 0 then
             vim.api.nvim_buf_set_lines(buf, -1, -1, true, { '', 'No comments' })
         else
@@ -109,7 +112,8 @@ function M.render_issue_to_buffer(buf, issue_json)
                 local author = comment.author.login
                 local timestamp = comment.createdAt
                 local body = string.gsub(comment.body, "\r", "")
-                vim.api.nvim_buf_set_lines(buf, -1, -1, true, { '', '#### `@' .. author .. '` at __' .. timestamp .. "__", '' })
+                vim.api.nvim_buf_set_lines(buf, -1, -1, true,
+                    { '', '#### `@' .. author .. '` at __' .. timestamp .. "__", '' })
                 vim.api.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(body), '\n'))
             end
         end
@@ -121,7 +125,7 @@ end
 
 --- Parses the buffer name and tries to retrieve the issue number and project.
 ---@param buf number Buffer Id for the issue buffer
-function M.get_issue_id_from_buf(buf)
+function GenericIssue.get_issue_id_from_buf(buf)
     local buf_name = vim.api.nvim_buf_get_name(buf)
     if string.find(buf_name, "[Issue]", 1, true) == nil then
         return nil
@@ -131,11 +135,10 @@ function M.get_issue_id_from_buf(buf)
     end
 end
 
-
 ---Return the comma separated list of labels from the issue buffer @c buf if possible.
 ---@param buf number Buffer-ID for issue.
 ---@return Set|nil labels Set of extracted labels. @c nil if that failed.
-function M.get_labels_from_issue_buffer(buf)
+function GenericIssue.get_labels_from_issue_buffer(buf)
     local log = require("gitforge.log")
     local curr_buf_content = vim.api.nvim_buf_get_lines(buf, 6, 7, false)
     local label_line = curr_buf_content[1]
@@ -154,7 +157,7 @@ end
 ---Return the string of the current state of the issue buffer @c buf if possible.
 ---@param buf number Buffer-Id for the issue
 ---@return string|nil status String representation of the issue status if found,  otherwise @c nil.
-function M.get_status_from_issue_buffer(buf)
+function GenericIssue.get_status_from_issue_buffer(buf)
     local log = require("gitforge.log")
     local curr_buf_content = vim.api.nvim_buf_get_lines(buf, 4, 5, false)
     local status_line = curr_buf_content[1]
@@ -173,7 +176,7 @@ end
 ---Return the comma separated list of assignees from the issue buffer @c buf if possible.
 ---@param buf number Buffer-ID for Issue.
 ---@return Set|nil assignees A set of assignees or @c nil if extraction failed.
-function M.get_assignee_from_issue_buffer(buf)
+function GenericIssue.get_assignee_from_issue_buffer(buf)
     local log = require("gitforge.log")
     local curr_buf_content = vim.api.nvim_buf_get_lines(buf, 5, 6, false)
     local assignee_line = curr_buf_content[1]
@@ -196,4 +199,4 @@ function M.get_assignee_from_issue_buffer(buf)
     end
 end
 
-return M
+return GenericIssue

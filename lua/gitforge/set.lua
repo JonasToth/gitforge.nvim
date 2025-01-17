@@ -64,6 +64,9 @@ end
 ---@return Set added all elements that have to be added to @c self to become @c other
 ---@return Set remove all elements that have to be removed from @c self to become @c other
 function Set:deltaTo(other)
+    local removed = self:difference(other)
+    local new = other:difference(self)
+    return new, removed
 end
 
 ---@return string CSV Joins each element in the set with a ',' together to form on string.
