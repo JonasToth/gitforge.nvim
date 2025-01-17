@@ -163,9 +163,10 @@ end
 
 ---@param buf integer
 ---@param tmp_file string path to temporary file
+---@param switch_to_insert boolean directly switch to insert mode for faster text input.
 ---@param action function
 ---@param cleanup function
-function GenericUI.setup_file_command_on_close(buf, tmp_file, action, cleanup)
+function GenericUI.setup_file_command_on_close(buf, tmp_file, switch_to_insert, action, cleanup)
     vim.api.nvim_buf_set_name(buf, tmp_file)
     local win_split = GenericUI.open_edit_window(buf)
     if win_split == 0 then
@@ -177,6 +178,11 @@ function GenericUI.setup_file_command_on_close(buf, tmp_file, action, cleanup)
     --Populating the buffer with content requires an initial write.
     vim.cmd("write! " .. tmp_file)
     vim.cmd("edit " .. tmp_file)
+
+    if switch_to_insert then
+        -- Switch to insert mode to be ready to type the write directly.
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("i", true, false, true), "n", false)
+    end
 
     local autocmdid
     autocmdid = vim.api.nvim_create_autocmd("WinLeave", {

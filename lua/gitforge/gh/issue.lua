@@ -1,5 +1,7 @@
 ---Provides executable calls to manipulate and view issues on Github.
 ---@class GHIssue
+---@field new function
+---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
 ---@field cmd_fetch function
@@ -8,9 +10,18 @@
 ---@field cmd_description_change function
 ---@field cmd_state_change function
 ---@field cmd_comment function
+---@field cmd_create_issue function
+---@field cmd_list_issues function
 ---@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
 local GHIssue = {}
+
+---@class IssueListOpts
+---@field state string? List issues only with specific state (e.g. open/closed)
+---@field project string?
+---@field limit integer? Limit the number of issues
+---@field labels string? CSV-separated list of labels
+---@field assignee string? CSV-separated list of assignees
 
 function GHIssue:new(buf)
     local s = setmetatable({}, { __index = GHIssue })
@@ -24,6 +35,33 @@ function GHIssue:newIssue(issue_number)
     s.buf = 0
     s.issue_number = issue_number
     return s
+end
+
+---@param issue_link string URL to the issue
+---@return GHIssue|nil
+function GHIssue:newFromLink(issue_link)
+    local log = require("gitforge.log")
+
+    local url_elements = vim.split(issue_link, "/")
+    local id
+    for index, value in ipairs(url_elements) do
+        if index == 7 then
+            id = value
+            break
+        end
+    end
+    if id == nil or #id == 0 then
+        log.notify_failure("Failed to extract issue id from URL")
+        log.trace_msg(vim.join(url_elements, " : "))
+        return nil
+    end
+    local int_id = tonumber(id)
+    if int_id == nil then
+        log.notify_failure("Failed to parse id-string as int")
+        log.trace_msg(id)
+        return nil
+    end
+    return self:newIssue(tostring(int_id))
 end
 
 function GHIssue:edit_cmd()
@@ -118,6 +156,41 @@ end
 ---@param comment_file string Path to temporary file to comment on
 function GHIssue:cmd_comment(comment_file)
     return { "gh", "issue", "comment", self.issue_number, "--body-file", comment_file }
+end
+
+---@param title string Title of new issue, must not be empty.
+---@param description_file string Path to temporary description file.
+function GHIssue:cmd_create_issue(title, description_file)
+    return { "gh", "issue", "create", "--title", title, "--body-file", description_file }
+end
+
+---@param opts IssueListOpts
+---@return table command
+function GHIssue:cmd_list_issues(opts)
+    local required_fields =
+    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
+    local gh_call = { "gh", "issue", "list", "--state", "all", "--json", required_fields }
+    if opts.state then
+        table.insert(gh_call, "--state")
+        table.insert(gh_call, opts.state)
+    end
+    if opts.project then
+        table.insert(gh_call, "-R")
+        table.insert(gh_call, opts.project)
+    end
+    if opts.limit then
+        table.insert(gh_call, "--limit")
+        table.insert(gh_call, tostring(opts.limit))
+    end
+    if opts.labels then
+        table.insert(gh_call, "--label")
+        table.insert(gh_call, opts.labels)
+    end
+    if opts.assignee then
+        table.insert(gh_call, "--assignee")
+        table.insert(gh_call, opts.assignee)
+    end
+    return gh_call
 end
 
 ---@param current_state string Current state of the issue.
