@@ -80,18 +80,6 @@ local get_issue_id_from_buf = function(buf)
     end
 end
 
-local addToSet = function(set, key)
-    set[key] = true
-end
-
-local removeFromSet = function(set, key)
-    set[key] = nil
-end
-
-local setContains = function(set, key)
-    return set[key] ~= nil
-end
-
 local set_buffer_options_for_edit = function(buf)
     a.nvim_set_option_value('readonly', false, { buf = buf })
     a.nvim_set_option_value('modifiable', true, { buf = buf })
@@ -110,47 +98,6 @@ local open_edit_window = function(buf)
     return win_split
 end
 
----Computes @c set1 - set2
----@param set1 table Keys are set values.
----@param set2 table Keys are set values.
----@return table Keys that are in @c set1 but not in @c set2
----@sa addToSet(), setContains()
-local setDifference = function(set1, set2)
-    local result_set = {}
-    for key, _ in pairs(set1) do
-        if not setContains(set2, key) then
-            addToSet(result_set, key)
-        end
-    end
-    return result_set
-end
-
----Create a set from a comma separated list of labels.
----@param label_string string Comma separated list of labels.
----@return table Keys are set elements.
-local createSetFromCSVList = function(label_string)
-    local result_set = {}
-    for _, el in pairs(vim.split(label_string, ",")) do
-        addToSet(result_set, el)
-    end
-    return result_set
-end
-
-local flattenSetToCSVList = function(label_set)
-    local label_table = {}
-    for key, _ in pairs(label_set) do
-        table.insert(label_table, key)
-    end
-    return vim.fn.join(label_table, ",")
-end
-
-function table.empty(self)
-    for _, _ in pairs(self) do
-        return false
-    end
-    return true
-end
-
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
 ---@param buf number Buffer ID to work on.
@@ -165,11 +112,12 @@ local set_issue_buffer_options = function(buf)
     end
     vim.keymap.set("n", "<localleader>q", ":close<CR>", key_opts_from_desc("Close Issue"))
 
+    local log = require("gitforge.log")
     vim.keymap.set("n", "<localleader>c", function()
             vim.schedule(function()
                 local issue_number = get_issue_id_from_buf(buf)
                 if issue_number == nil then
-                    print("Failed to determine issue id to comment on")
+                    log.notify_failure("Failed to determine issue id to comment on in buffer " .. buf)
                     return
                 end
                 M.comment_on_issue(issue_number)
@@ -179,12 +127,13 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>u", function()
             M.update_issue_buffer(buf)
+            log.notify_change("Updated the issue buffer")
         end,
         key_opts_from_desc("Update Issue"))
 
     vim.keymap.set("n", "<localleader>t", function()
             vim.schedule(function()
-                print("Change Title")
+                log.trace_msg("Change Title")
                 local curr_buf_content = a.nvim_buf_get_lines(buf, 0, 1, false)
                 local headline_markdown = curr_buf_content[1]
                 -- strip markdown header 1
@@ -192,11 +141,11 @@ local set_issue_buffer_options = function(buf)
                 vim.ui.input({ prompt = "Enter New Title: ", default = headline },
                     function(input)
                         if input == nil then
-                            print("Aborted input")
+                            log.ephemeral_info("Aborted input")
                             return
                         end
                         if #input == 0 then
-                            print("Empty new Title is not allowed")
+                            log.notify_failure("Empty new Title is not allowed")
                         end
                         M.change_title(buf, input)
                     end)
@@ -213,7 +162,7 @@ local set_issue_buffer_options = function(buf)
                 vim.ui.input({ prompt = "Enter New Labels: ", default = previous_labels },
                     function(input)
                         if input == nil then
-                            print("Aborted Issue Label Change")
+                            log.ephemeral_info("Aborted Issue Label Change")
                             return
                         end
                         M.change_labels(buf, previous_labels, input)
@@ -231,7 +180,7 @@ local set_issue_buffer_options = function(buf)
                 vim.ui.input({ prompt = "Enter New Assignee(s): ", default = previous_assignee },
                     function(input)
                         if input == nil then
-                            print("Aborted Issue Assigning")
+                            log.ephemeral_info("Aborted Issue Assigning")
                             return
                         end
                         M.change_assignees(buf, previous_assignee, input)
@@ -276,6 +225,8 @@ end
 --- @param issue_json table Table of JSON data.
 --- @return number number of the buffer. Can be `0` if creation failed.
 function M.render_issue_to_buffer(buf, issue_json)
+    local log = require("gitforge.log")
+    log.trace_msg("Rendering Issue to buffer " .. buf)
     if issue_json == nil then
         return buf
     end
@@ -284,11 +235,10 @@ function M.render_issue_to_buffer(buf, issue_json)
         buf = a.nvim_create_buf(true, false)
     end
     if buf == 0 then
-        print("Failed to create buffer to view issues")
+        log.notify_failure("Failed to create buffer to view issues")
         return 0
     end
 
-    print("Rendering issue in buf: " .. tostring(buf))
     local desc = string.gsub(issue_json.body, "\r", "")
     a.nvim_set_option_value('modifiable', true, { buf = buf })
     a.nvim_set_option_value('readonly', false, { buf = buf })
@@ -358,15 +308,17 @@ end
 ---@param buf number Buffer-ID for issue.
 ---@return string|nil labels a comma separated list of labels on success, otherwise @c nil.
 function M.get_labels_from_issue_buffer(buf)
+    local log = require("gitforge.log")
     local curr_buf_content = a.nvim_buf_get_lines(buf, 6, 7, false)
     local label_line = curr_buf_content[1]
     if label_line == nil then
-        print("Failed to get label line from buffer " .. buf)
+        log.notify_failure("Failed to get label line from buffer " .. buf)
         return nil;
     end
     -- verify that the labels line is found
     if label_line:sub(1, 7) ~= "Labels:" then
-        print("Found Label line does not contain 'Labels:' at beginning of line, ERROR (line: " .. label_line .. ")")
+        log.notify_failure("Found Label line does not contain 'Labels:' at beginning of line, ERROR for line:\n" ..
+            label_line)
         return ""
     end
     -- extract all labels from the line
@@ -377,16 +329,16 @@ end
 ---@param buf number Buffer-Id for the issue
 ---@return string|nil status String representation of the issue status if found,  otherwise @c nil.
 function M.get_status_from_issue_buffer(buf)
+    local log = require("gitforge.log")
     local curr_buf_content = a.nvim_buf_get_lines(buf, 4, 5, false)
-    print(curr_buf_content)
     local status_line = curr_buf_content[1]
     if status_line == nil then
-        print("Failed to get status line from buffer " .. buf)
+        log.notify_failure("Failed to get status line from buffer " .. buf)
         return nil;
     end
     local extracted_status = string.match(status_line, "^Status: (.+) %(")
     if extracted_status == nil then
-        print("Failed to extract status from buffer " .. buf .. " and supposed state line " .. status_line)
+        log.notify_failure("Failed to extract status from buffer " .. buf .. " and supposed state line:\n" .. status_line)
         return nil
     end
     return vim.trim(extracted_status)
@@ -396,15 +348,16 @@ end
 ---@param buf number Buffer-ID for Issue.
 ---@return string|nil Returns a comma separated list of assignees on success, otherwise @c nil.
 function M.get_assignee_from_issue_buffer(buf)
+    local log = require("gitforge.log")
     local curr_buf_content = a.nvim_buf_get_lines(buf, 5, 6, false)
     local assignee_line = curr_buf_content[1]
     if assignee_line == nil then
-        print("Failed to get assignee line from buffer " .. buf)
+        log.notify_failure("Failed to get assignee line from buffer " .. buf)
         return nil;
     end
     -- verify that the labels line is found
     if assignee_line:sub(1, 12) ~= "Assigned to:" then
-        print("Found assignee line does not contain 'Assigned to:' at beginning of line, ERROR (line: " ..
+        log.notify_failure("Found assignee line does not contain 'Assigned to:' at beginning of line, ERROR (line: " ..
             assignee_line .. ")")
         return nil
     end
@@ -419,6 +372,7 @@ end
 
 -- Returns the issue labels of the current project.
 function M.get_labels()
+    local log = require("gitforge.log")
     local selected_labels = {}
     local on_choice = function(choice)
         print(choice)
@@ -426,13 +380,13 @@ function M.get_labels()
     end
     local handle_labels = function(handle)
         if handle.code ~= 0 then
-            print("Failed to query Labels: " .. handle.stderr)
+            log.notify_failure("Failed to query Labels:\n" .. handle.stderr)
             return
         end
         vim.schedule(function()
             local label_list_json = vim.fn.json_decode(handle.stdout)
             if label_list_json == nil then
-                print("Failed to parse JSON response for labels")
+                log.notify_failure("Failed to parse JSON response for labels")
                 return
             end
             vim.ui.select(label_list_json, {
@@ -442,6 +396,7 @@ function M.get_labels()
         end)
     end
     local gh_call = { "gh", "label", "list", "--json", "name,color,description" }
+    log.executed_command(gh_call)
     local output = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_labels)
     output:wait()
 
@@ -452,16 +407,17 @@ end
 -- TODO: Provide a way to select labels directly on creation.
 --       Right now it needs to be done by editing the new issue.
 function M.create_issue(opts)
+    local log = require("gitforge.log")
     local title
     local description_file
     local cleanup_description_file = function()
-        print("Cleanup called")
+        log.trace_msg("Cleanup description file called")
         os.remove(description_file)
     end
     local show_issue_after_creation = function(handle)
         cleanup_description_file()
         if handle.code ~= 0 then
-            print("Failed to create issue: " .. handle.stderr)
+            log.notify_failure("Failed to create issue: \n" .. handle.stderr)
             return
         end
         vim.schedule(function()
@@ -474,8 +430,8 @@ function M.create_issue(opts)
                 end
             end
             if issue_link == nil or #issue_link == 0 then
-                print("Failed to retrieve issue link for new issue")
-                print(lines)
+                log.notify_failure("Failed to retrieve issue link for new issue")
+                log.trace_msg(vim.join(lines, "\n"))
                 return
             end
             local url_elements = vim.split(issue_link, "/")
@@ -487,30 +443,30 @@ function M.create_issue(opts)
                 end
             end
             if id == nil or #id == 0 then
-                print("Failed to extract issue id from URL")
-                print(url_elements)
+                log.notify_failure("Failed to extract issue id from URL")
+                log.trace_msg(vim.join(url_elements, " : "))
                 return
             end
             local int_id = tonumber(id)
             if int_id == nil then
-                print("Failed to parse id-string as int")
-                print(id)
+                log.notify_failure("Failed to parse id-string as int")
+                log.trace_msg(id)
                 return
             end
             M.view_issue(int_id, opts)
         end)
     end
     local create_issue_call = function()
-        print("Calling gh command for issue creation: " .. title .. " and " .. description_file)
-        vim.system({ "gh", "issue", "create", "--title", title, "--body-file", description_file },
-            { text = true, timeout = opts.timeout }, show_issue_after_creation)
+        local gh_call = { "gh", "issue", "create", "--title", title, "--body-file", description_file }
+        log.executed_command(gh_call)
+        vim.system(gh_call, { text = true, timeout = opts.timeout }, show_issue_after_creation)
     end
     local write_description_in_tmp_buffer = function()
         description_file = os.tmpname()
         local buf = a.nvim_create_buf(false, false)
-        print("Created buffer and tempfile for it")
+        log.trace_msg("Created buffer and tempfile for it")
         if buf == 0 then
-            print("Failed to create buffer to write the description.")
+            log.notify_failure("Failed to create buffer to write the description.")
             return
         end
         a.nvim_buf_set_name(buf, description_file)
@@ -518,11 +474,11 @@ function M.create_issue(opts)
 
         local win_split = open_edit_window(buf)
         if win_split == 0 then
-            print("Failed to create window split for writing the description.")
+            log.notify_failure("Failed to create window split for writing the description.")
             return
         end
 
-        print("Created win split for tmpfile buffer")
+        log.trace_msg("Created win split for tmpfile buffer")
 
         vim.cmd("edit " .. description_file)
         -- Switch to insert mode to be ready to type the comment directly.
@@ -532,7 +488,7 @@ function M.create_issue(opts)
         autocmdid = a.nvim_create_autocmd("WinLeave", {
             -- group = a.nvim_create_augroup("GitForge", { clear = true }),
             callback = function()
-                print("Callback on WinLeave is called")
+                log.trace_msg("Callback on WinLeave is called")
                 if win_split ~= 0 then
                     create_issue_call()
                     win_split = 0
@@ -552,12 +508,13 @@ function M.create_issue(opts)
 end
 
 function M.comment_on_issue(issue_number)
+    local log = require("gitforge.log")
     local comment_file = os.tmpname()
-    print("Tempfile for comment: " .. comment_file)
+    log.trace_msg("Tempfile for comment: " .. comment_file)
     local comment_buf = a.nvim_create_buf(false, false)
     local cleanup = function() os.remove(comment_file) end
     if comment_buf == 0 then
-        print("Failed to create buffer for commenting")
+        log.notify_failure("Failed to create buffer for commenting")
         cleanup()
         return
     end
@@ -566,7 +523,7 @@ function M.comment_on_issue(issue_number)
 
     local win_split = open_edit_window(comment_buf)
     if win_split == 0 then
-        print("Failed to create window split for commenting")
+        log.notify_failure("Failed to create window split for commenting")
         cleanup()
         return
     end
@@ -578,12 +535,14 @@ function M.comment_on_issue(issue_number)
     local perform_comment = function()
         local str = buffer_to_string(comment_buf)
         if #str == 0 then
-            print("Aborted commenting with empty content")
+            log.ephemeral_info("Aborted commenting with empty content")
             cleanup()
             return
         end
-        print("Wrote something in the windows")
-        vim.fn.system({ "gh", "issue", "comment", issue_number, "--body-file", comment_file })
+        local gh_call = { "gh", "issue", "comment", issue_number, "--body-file", comment_file }
+        log.executed_command(gh_call)
+        vim.fn.system(gh_call)
+        log.notify_change("Commented on issue " .. issue_number)
         cleanup()
     end
     local autocmdid
@@ -611,22 +570,23 @@ function M.change_issue_description(buf, opts)
     --        could have this line itself! The problem is, that comments themself might have
     --        this line contained. So the last instance is wrong. Somewhere in between "smart".
     --        The solution is likely just using a weird '## Comments' headline in rendering ...
-    print("Edit Issue Description")
+    local log = require("gitforge.log")
+    log.trace_msg("Edit Issue Description")
     local issue_number = get_issue_id_from_buf(buf)
     if issue_number == nil then
-        print("Failed to retrieve issue number for issue")
+        log.notify_failure("Failed to retrieve issue number for issue in buffer " .. buf)
         return
     end
     local full_issue_str = buffer_to_string(buf)
     local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
     if idx_start_of_desc_headline == nil then
-        print("Failed to find headline for description")
+        log.notify_failure("Failed to find headline for description in issue buffer " .. buf)
         return
     end
 
     local idx_newline_after_description_headline = string.find(full_issue_str, "\n", idx_start_of_desc_headline)
     if idx_newline_after_description_headline == nil then
-        print("Expected a newline character after headline string!")
+        log.notify_failure("Expected a newline character after headline string in issue buffer " .. buf)
         return
     else
         -- Remove the two '\n' inserted after the headline.
@@ -641,11 +601,13 @@ function M.change_issue_description(buf, opts)
         idx_start_of_comments = idx_start_of_comments - 3
     end
     if idx_start_of_comments - idx_newline_after_description_headline < 2 then
-        print("Expected a greater distance between start of description and start of comments. Bug?!")
+        log.notify_failure(
+            "Expected a greater distance between start of description and start of comments. Bug?! in issue buffer " ..
+            buf)
         return
     end
     local parsed_description = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
-    print(parsed_description)
+    log.trace_msg(parsed_description)
 
     -- open new tmp buffer, like when commenting/creating
     -- sending / changing the issue body with body-file on save-close
@@ -653,7 +615,7 @@ function M.change_issue_description(buf, opts)
     local descr_edit_buf = a.nvim_create_buf(false, false)
     local cleanup = function() os.remove(tmp_desc_file) end
     if descr_edit_buf == 0 then
-        print("Failed to create buffer to edit description")
+        log.notify_failure("Failed to create buffer to edit description")
         cleanup()
         return
     end
@@ -667,7 +629,7 @@ function M.change_issue_description(buf, opts)
 
     local win_split = open_edit_window(descr_edit_buf)
     if win_split == 0 then
-        print("Failed to create window to edit the description")
+        log.notify_failure("Failed to create window to edit the description")
         cleanup()
         return
     end
@@ -678,10 +640,12 @@ function M.change_issue_description(buf, opts)
     local edit_description = function()
         local new_desc = buffer_to_string(descr_edit_buf)
         if new_desc == parsed_description then
-            print("No update to the description occured.")
+            log.ephemeral_info("No update to the description occured.")
         else
-            print("Description changed - updating on gitforge")
-            vim.fn.system({ "gh", "issue", "edit", issue_number, "--body-file", tmp_desc_file })
+            local gh_call = { "gh", "issue", "edit", issue_number, "--body-file", tmp_desc_file }
+            log.executed_command(gh_call)
+            vim.fn.system(gh_call)
+            log.notify_change("Updated the description of issue " .. issue_number)
         end
         cleanup()
     end
@@ -700,7 +664,8 @@ function M.change_issue_description(buf, opts)
 end
 
 function M.change_issue_state(buf, opts)
-    print("Edit State - Open/Close")
+    local log = require("gitforge.log")
+    log.trace_msg("Edit State - Open/Close")
     local issue_number = get_issue_id_from_buf(buf)
     local issue_status = M.get_status_from_issue_buffer(buf)
 
@@ -715,20 +680,31 @@ function M.change_issue_state(buf, opts)
     vim.ui.select(list_of_next_stati, { prompt = "Select new issue state:", },
         function(choice)
             if issue_status == choice then
-                print("Issue state did not change")
+                log.ephemeral_info("Issue state did not change")
                 return
             end
-            print("From " .. issue_status .. " to " .. choice)
+            log.trace_msg("From " .. issue_status .. " to " .. choice)
+            local gh_call = { "gh", "issue", }
             if choice == "CLOSED completed" then
-                vim.fn.system({ "gh", "issue", "close", issue_number, "--reason", "completed" })
+                table.insert(gh_call, "close")
+                table.insert(gh_call, issue_number)
+                table.insert(gh_call, "--reason")
+                table.insert(gh_call, "completed")
             elseif choice == "CLOSED not planned" then
-                vim.fn.system({ "gh", "issue", "close", issue_number, "--reason", "not planned" })
+                table.insert(gh_call, "close")
+                table.insert(gh_call, issue_number)
+                table.insert(gh_call, "--reason")
+                table.insert(gh_call, "not planned")
             elseif choice == "REOPEN" then
-                vim.fn.system({ "gh", "issue", "reopen", issue_number })
+                table.insert(gh_call, "reopen")
+                table.insert(gh_call, issue_number)
             else
-                print("Unexpected next state occured. Performing no update!")
+                log.notify_failure("Unexpected next state occured. BUG detected. Performing no update!")
                 return
             end
+            log.executed_command(gh_call)
+            vim.fn.system(gh_call)
+            log.notify_change("Changed the state for issue " .. issue_number)
             M.update_issue_buffer(buf)
         end)
 end
@@ -749,7 +725,7 @@ function M.cached_issues_picker()
     end, vim.api.nvim_list_bufs())
 
     if not next(bufnrs) then
-        print("No issues buffers found")
+        require("gitforge.log").ephemeral_info("No issues buffers found")
         return
     end
 
@@ -915,9 +891,10 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
 end
 
 function M.list_issues(opts)
+    local log = require("gitforge.log")
     local open_telescope_list = function(handle)
         if handle.code ~= 0 then
-            print("Failed to retrieve issue list")
+            log.notify_failure("Failed to retrieve issue list")
             return
         end
         local data = vim.json.decode(handle.stdout)
@@ -942,7 +919,7 @@ function M.list_issues(opts)
         table.insert(gh_call, "--assignee")
         table.insert(gh_call, opts.assignee)
     end
-    print(gh_call)
+    log.executed_command(gh_call)
     local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_telescope_list)
     call_handle:wait()
 end
@@ -969,7 +946,7 @@ local create_issue_window = function(buf, title_ui)
     }
     local win = a.nvim_open_win(buf, true, win_options)
     if win == 0 then
-        print("Failed to open float for issue")
+        require("gitforge.log").notify_failure("Failed to open float for issue")
         return
     end
     -- Switch to normal mode - Telescope selection leaves in insert mode?!
@@ -1003,41 +980,44 @@ function M.fetch_issue_call(issue_number, opts)
 end
 
 function M.update_issue_buffer(buf)
+    local log = require("gitforge.log")
     local opts = {}
     local issue_number = get_issue_id_from_buf(buf)
     local gh_call = M.fetch_issue_call(issue_number, opts)
+
+    log.executed_command(gh_call)
     vim.system(gh_call, { text = true, timeout = M.opts.timeout },
         function(handle)
             if handle.code ~= 0 then
-                print("Failed to retrieve issue content")
-                print(handle)
+                log.notify_failure("Failed to retrieve issue content")
                 return
             end
             vim.schedule(function()
                 local issue_json = vim.fn.json_decode(handle.stdout)
-                print("update single issue in buf: " .. tostring(buf))
+                log.trace_msg("update single issue in buf: " .. tostring(buf))
                 buf = M.render_issue_to_buffer(buf, issue_json)
 
                 local title_ui = issue_title_ui(issue_json)
                 a.nvim_buf_set_name(buf, title_ui)
                 set_issue_buffer_options(buf)
+                log.ephemeral_info("Updated content for issue " .. issue_number)
             end)
         end)
 end
 
 function M.view_issue(issue_number, opts)
+    local log = require("gitforge.log")
     local buf = find_existing_issue_buffer(issue_number)
 
     local open_buffer_with_issue = function(handle)
         if handle.code ~= 0 then
-            print("Failed to retrieve issue content")
-            print(handle)
+            log.notify_failure("Failed to retrieve issue content")
             return
         end
         vim.schedule(function()
             local data = vim.fn.json_decode(handle.stdout)
 
-            print("view single issue in buf: " .. tostring(buf))
+            log.trace_msg("view single issue in buf: " .. tostring(buf))
             buf = M.render_issue_to_buffer(buf, data)
 
             local title_ui = issue_title_ui(data)
@@ -1051,19 +1031,21 @@ function M.view_issue(issue_number, opts)
     local gh_call = M.fetch_issue_call(issue_number, opts)
 
     if buf == 0 then
-        print("Issue not available as buffer - creating it new")
+        log.trace_msg("Issue not available as buffer - creating it new")
+        log.executed_command(gh_call)
         local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
         call_handle:wait()
     else
-        print("Found issue in buffer - displaying old state and triggering update")
+        log.trace_msg("Found issue in buffer - displaying old state and triggering update")
         local title_ui = a.nvim_buf_get_name(buf)
         create_issue_window(buf, title_ui)
 
         -- Trigger an update after already opening the issue in a window.
+        log.executed_command(gh_call)
         vim.system(gh_call, { text = true, timeout = M.opts.timeout },
             function(handle)
                 if handle.code ~= 0 then
-                    print("Failed to retrieve issue content")
+                    log.notify_failure("Failed to retrieve issue content")
                     return
                 end
                 vim.schedule(function() M.update_issue_buffer(buf) end)
@@ -1072,61 +1054,73 @@ function M.view_issue(issue_number, opts)
 end
 
 function M.change_title(buf, title_input)
+    local log = require("gitforge.log")
+    local issue_number = get_issue_id_from_buf(buf)
     local handle_title_update = function(handle)
         vim.schedule(function()
             if handle.code ~= 0 then
-                print("Failed to update title")
+                log.notify_failure("Failed to update title")
                 return
             end
-            print("Updated title")
+            log.notify_change("Updated the title for issue " .. issue_number)
             M.update_issue_buffer(buf)
         end)
     end
-    local issue_number = get_issue_id_from_buf(buf)
     local gh_call = { "gh", "issue", "edit", issue_number, "--title", title_input }
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-        handle_title_update)
+    log.executed_command(gh_call)
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_title_update)
     call_handle:wait()
 end
 
 local create_label_update_command = function(new_label_input, previous_labels, buf)
-    local previous_labels_set = createSetFromCSVList(previous_labels)
-    local new_labels_set = createSetFromCSVList(new_label_input)
-    local removed_labels = setDifference(previous_labels_set, new_labels_set)
-    local new_labels = setDifference(new_labels_set, previous_labels_set)
+    require("gitforge.set")
+    local previous_labels_set = Set:createFromCSVList(previous_labels)
+    local new_labels_set = Set:createFromCSVList(new_label_input)
+
+    local removed_labels = previous_labels_set:difference(new_labels_set)
+    local new_labels = new_labels_set:difference(previous_labels_set)
+
+    if removed_labels:empty() and new_labels:empty() then
+        return nil
+    end
 
     local issue_number = get_issue_id_from_buf(buf)
     local gh_call = { "gh", "issue", "edit", issue_number }
 
-    if not table.empty(removed_labels) then
+    if not removed_labels:empty() then
         table.insert(gh_call, "--remove-label")
-        table.insert(gh_call, flattenSetToCSVList(removed_labels))
+        table.insert(gh_call, removed_labels:toCSV())
     end
 
-    if not table.empty(new_labels) then
+    if not new_labels:empty() then
         table.insert(gh_call, "--add-label")
-        table.insert(gh_call, flattenSetToCSVList(new_labels))
+        table.insert(gh_call, new_labels:toCSV())
     end
     return gh_call
 end
 
 local create_assignee_update_command = function(new_assignees_input, previous_assignees, buf)
-    local previous_assignees_set = createSetFromCSVList(previous_assignees)
-    local new_assignees_set = createSetFromCSVList(new_assignees_input)
-    local removed_assignees = setDifference(previous_assignees_set, new_assignees_set)
-    local new_assignees = setDifference(new_assignees_set, previous_assignees_set)
+    require("gitforge.set")
+    local previous_assignees_set = Set:createFromCSVList(previous_assignees)
+    local new_assignees_set = Set:createFromCSVList(new_assignees_input)
+    local removed_assignees = previous_assignees_set:difference(new_assignees_set)
+    local new_assignees = new_assignees_set:difference(previous_assignees_set)
+
+    if removed_assignees:empty() and new_assignees:empty() then
+        return nil
+    end
 
     local issue_number = get_issue_id_from_buf(buf)
     local gh_call = { "gh", "issue", "edit", issue_number }
 
-    if not table.empty(removed_assignees) then
+    if not removed_assignees:empty() then
         table.insert(gh_call, "--remove-assignee")
-        table.insert(gh_call, flattenSetToCSVList(removed_assignees))
+        table.insert(gh_call, removed_assignees:toCSV())
     end
 
-    if not table.empty(new_assignees) then
+    if not new_assignees:empty() then
         table.insert(gh_call, "--add-assignee")
-        table.insert(gh_call, flattenSetToCSVList(new_assignees))
+        table.insert(gh_call, new_assignees:toCSV())
     end
     return gh_call
 end
@@ -1137,41 +1131,56 @@ end
 ---@param previous_labels string comma separated list of the previous labels, used for set difference
 ---@param new_labels string comma separated list of new labels, used for set difference
 function M.change_labels(buf, previous_labels, new_labels)
+    local log = require("gitforge.log")
     local gh_call = create_label_update_command(new_labels, previous_labels, buf)
+    if gh_call == nil then
+        log.ephemeral_info("Labels did not change.")
+        return
+    end
     local handle_label_update = function(handle)
         vim.schedule(function()
             if handle.code ~= 0 then
-                print("Failed to update labels")
+                a.nvim_err_write(handle.stderr)
+                a.nvim_err_write(handle.stdout)
+                log.notify_failure("Failed to update labels")
                 return
             end
-            print("Updated Labels")
+            log.notify_change("Updated Labels")
             M.update_issue_buffer(buf)
         end)
     end
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-        handle_label_update)
+    log.executed_command(gh_call)
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_label_update)
     call_handle:wait()
 end
 
 ---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
 ---@param buf number Buffer-ID of the issue
----@param previous_labels string comma separated list of the previous assignees, used for set difference
----@param new_labels string comma separated list of new assignees, used for set difference
-function M.change_assignees(buf, previous_labels, new_labels)
-    local gh_call = create_assignee_update_command(new_labels, previous_labels, buf)
-    local handle_label_update = function(handle)
+---@param previous_assignees string comma separated list of the previous assignees, used for set difference
+---@param new_assignees string comma separated list of new assignees, used for set difference
+function M.change_assignees(buf, previous_assignees, new_assignees)
+    local log = require("gitforge.log")
+    local gh_call = create_assignee_update_command(new_assignees, previous_assignees, buf)
+    if gh_call == nil then
+        log.ephemeral_info("Assignees did not change.")
+        return
+    end
+    local handle_assignee_update = function(handle)
         vim.schedule(function()
             if handle.code ~= 0 then
-                print("Failed to update assignees")
+                --TODO: Better error logging
+                a.nvim_err_write(handle.stderr)
+                a.nvim_err_write(handle.stdout)
+                log.notify_failure("Failed to update assignees")
                 return
             end
-            print("Updated Assignees")
+            log.notify_change("Updated Assignees")
             M.update_issue_buffer(buf)
         end)
     end
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-        handle_label_update)
+    log.executed_command(gh_call)
+    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_assignee_update)
     call_handle:wait()
 end
 

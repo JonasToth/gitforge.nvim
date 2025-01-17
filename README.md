@@ -41,7 +41,10 @@ Please call `:checkhealth gitforge` to see if any issues are detected by the plu
 
 - [markview.nvim](https://github.com/OXY2DEV/markview.nvim) or [render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim) for markdown visualization
 - [neogit](https://github.com/NeogitOrg/neogit) for direct `git` interaction
-- [snacks.nvim](https://github.com/folke/snacks.nvim) for better input
+- for better `vim.ui.input` and notifications, there are multiple options
+    - [snacks.nvim](https://github.com/folke/snacks.nvim)
+    - [dressing.nvim](https://github.com/stevearc/dressing.nvim)
+    - [nvim-notify](https://github.com/rcarriga/nvim-notify)
 - [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) to quickly execute commands directly
 
 ## Plugins you might want to use instead
