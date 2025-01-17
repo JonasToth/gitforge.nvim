@@ -18,7 +18,7 @@ function M.setup(opts)
         }, provider)
     end)
     vim.keymap.set("n", "<leader>qc", function() M.cached_issues_picker(provider) end)
-    vim.keymap.set("n", "<leader>qn", function() M.create_issue(M.opts, provider) end)
+    vim.keymap.set("n", "<leader>qn", function() M.create_issue(provider) end)
 end
 
 ---@param opts table
@@ -35,11 +35,10 @@ function M.handle_command(opts)
 end
 
 -- Creates a new issue by prompting for the title. The description is written in a new buffer.
----@param opts table
 ---@param provider GHIssue
 -- TODO: Provide a way to select labels directly on creation.
 --       Right now it needs to be done by editing the new issue.
-function M.create_issue(opts, provider)
+function M.create_issue(provider)
     local log = require("gitforge.log")
     local title
     local description_file
@@ -74,8 +73,7 @@ function M.create_issue(opts, provider)
     end
     local create_issue_call = function()
         local cmd = provider:cmd_create_issue(title, description_file)
-        log.executed_command(cmd)
-        vim.system(cmd, { text = true, timeout = opts.timeout }, show_issue_after_creation)
+        require("gitforge.utility").async_exec(cmd, show_issue_after_creation):wait()
     end
     local write_description_in_tmp_buffer = function()
         local buf = a.nvim_create_buf(false, false)
@@ -299,10 +297,7 @@ function M.list_issues(opts, provider)
             create_telescope_picker_for_issue_list(data, provider)
         end)
     end
-    local gh_call = provider:cmd_list_issues(opts)
-    log.executed_command(gh_call)
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_telescope_list)
-    call_handle:wait()
+    require("gitforge.utility").async_exec(provider:cmd_list_issues(opts), open_telescope_list):wait()
 end
 
 ---@param provider GHIssue

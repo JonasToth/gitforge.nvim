@@ -105,9 +105,7 @@ function GenericUI.refresh_issue(provider, completion)
     local log = require("gitforge.log")
     local command = provider:cmd_fetch()
 
-    log.executed_command(command)
-    --TODO: Provide proper options
-    return vim.system(command, { text = true, timeout = 5000 },
+    return require("gitforge.utility").async_exec(command,
         function(handle)
             if handle.code ~= 0 then
                 -- log.notify_failure("Failed to retrieve issue content")
@@ -155,10 +153,7 @@ function GenericUI.perform_issue_update_cmd(provider, command_generator)
             GenericUI.refresh_issue(provider)
         end)
     end
-    log.executed_command(command)
-    --TODO: Provide proper options.
-    local call_handle = vim.system(command, { text = true, timeout = 5000 }, handle_cmd_completion)
-    call_handle:wait()
+    require("gitforge.utility").async_exec(command, handle_cmd_completion):wait()
 end
 
 ---@param buf integer
