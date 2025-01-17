@@ -56,7 +56,7 @@ function M.setup(opts)
             -- assignee = "@me",
         }, provider)
     end)
-    vim.keymap.set("n", "<leader>qc", function() ia.cached_issues_picker(provider) end)
+    vim.keymap.set("n", "<leader>qc", function() ia.list_cached_issues(provider) end)
     vim.keymap.set("n", "<leader>qn", function() ia.create_issue(provider) end)
 end
 

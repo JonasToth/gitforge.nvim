@@ -385,6 +385,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     ts.utils.warn_no_selection "Missing Issue Selection"
                     return
                 end
+                actions.close(prompt_bufnr)
                 local p = provider:newIssue(selection.value.number)
                 IssueActions.view_issue(p)
             end)
@@ -421,10 +422,11 @@ function IssueActions.list_cached_issues(provider)
     local opts = {}
 
     local util = require("gitforge.utility")
+    local generic_ui = require("gitforge.generic_ui")
 
     local bufnrs = vim.tbl_filter(function(bufnr)
         local bufname = vim.api.nvim_buf_get_name(bufnr)
-        return string.find(bufname, "[Issue]", 1, true) ~= nil
+        return string.find(bufname, generic_ui.forge_issue_pattern, 1, true) ~= nil
     end, vim.api.nvim_list_bufs())
 
     if not next(bufnrs) then
@@ -445,20 +447,25 @@ function IssueActions.list_cached_issues(provider)
         table.insert(buffers, element)
     end
 
-    print(buffers)
     pickers
         .new({}, {
             prompt_title = "Issue Buffers",
             finder = finders.new_table {
                 results = buffers,
                 entry_maker = function(entry)
+                    local idx_start = string.find(entry.bufname, generic_ui.forge_issue_pattern, 1, true)
+                    if idx_start == nil then
+                        require("gitforge.log").ephemeral_info("Failed to identify cache issue buffer")
+                        return nil
+                    end
+                    local buf_txt = string.sub(entry.bufname, idx_start)
                     return make_entry.set_default_entry_mt({
                         ordinal = entry.issue_number .. ':' .. entry.bufname,
                         bufnr = entry.bufnr,
                         bufname = entry.bufname,
                         issue_number = entry.issue_number,
                         value = entry,
-                        display = entry.issue_number .. ' || ' .. entry.bufname,
+                        display = buf_txt,
                     }, {})
                 end,
             },
@@ -479,6 +486,7 @@ function IssueActions.list_cached_issues(provider)
                         ts.utils.warn_no_selection "Missing Issue Selection"
                         return
                     end
+                    actions.close(prompt_bufnr)
                     local p = provider:newIssue(selection.value.issue_number)
                     IssueActions.view_issue(p)
                 end)
