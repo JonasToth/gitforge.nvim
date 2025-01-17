@@ -136,25 +136,26 @@ function GenericIssue.set_issue_buffer_options(provider)
     local key_opts_from_desc = function(description)
         return { buffer = provider.buf, nowait = true, desc = description, silent = true }
     end
-    vim.keymap.set("n", "<localleader>q", ":close<CR>", key_opts_from_desc("Close Issue"))
-    vim.keymap.set("n", "<localleader>u", function()
+    local keys = require("gitforge").opts.issue_keys
+    vim.keymap.set("n", keys.close, ":close<CR>", key_opts_from_desc("Close Issue"))
+    vim.keymap.set("n", keys.update, function()
             require("gitforge.generic_ui").refresh_issue(provider)
             require("gitforge.log").notify_change("Updated the issue buffer")
         end,
         key_opts_from_desc("Update Issue"))
 
     local ia = require("gitforge.issue_actions")
-    vim.keymap.set("n", "<localleader>c", function() ia.comment_on_issue(provider) end,
+    vim.keymap.set("n", keys.comment, function() ia.comment_on_issue(provider) end,
         key_opts_from_desc("Comment on Issue"))
-    vim.keymap.set("n", "<localleader>t", function() ia.change_issue_title(provider) end,
+    vim.keymap.set("n", keys.title, function() ia.change_issue_title(provider) end,
         key_opts_from_desc("Change Title"))
-    vim.keymap.set("n", "<localleader>l", function() ia.change_issue_labels(provider) end,
+    vim.keymap.set("n", keys.labels, function() ia.change_issue_labels(provider) end,
         key_opts_from_desc("Change Labels"))
-    vim.keymap.set("n", "<localleader>a", function() ia.change_issue_assignees(provider) end,
+    vim.keymap.set("n", keys.assignees, function() ia.change_issue_assignees(provider) end,
         key_opts_from_desc("Assign Issue"))
-    vim.keymap.set("n", "<localleader>e", function() ia.change_issue_description(provider) end,
+    vim.keymap.set("n", keys.description, function() ia.change_issue_description(provider) end,
         key_opts_from_desc("Edit Issue Body"))
-    vim.keymap.set("n", "<localleader>s", function() ia.change_issue_state(provider) end,
+    vim.keymap.set("n", keys.state, function() ia.change_issue_state(provider) end,
         key_opts_from_desc("Edit State - Reopen/Close"))
 end
 

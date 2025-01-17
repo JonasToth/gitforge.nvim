@@ -71,7 +71,6 @@ end
 function GHIssue:cmd_fetch()
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    print(vim.inspect(self))
     local gh_call = { "gh", "issue", "view", self.issue_number, "--json", required_fields }
     -- if opts.project then
     --     table.insert(gh_call, "-R")
