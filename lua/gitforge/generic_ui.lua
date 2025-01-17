@@ -161,4 +161,35 @@ function GenericUI.perform_issue_update_cmd(provider, command_generator)
     call_handle:wait()
 end
 
+---@param buf integer
+---@param tmp_file string path to temporary file
+---@param action function
+---@param cleanup function
+function GenericUI.setup_file_command_on_close(buf, tmp_file, action, cleanup)
+    vim.api.nvim_buf_set_name(buf, tmp_file)
+    local win_split = GenericUI.open_edit_window(buf)
+    if win_split == 0 then
+        require("gitforge.log").notify_failure("Failed to create window to edit the description")
+        cleanup()
+        return
+    end
+
+    --Populating the buffer with content requires an initial write.
+    vim.cmd("write! " .. tmp_file)
+    vim.cmd("edit " .. tmp_file)
+
+    local autocmdid
+    autocmdid = vim.api.nvim_create_autocmd("WinLeave", {
+        group = vim.api.nvim_create_augroup("GitForge", { clear = true }),
+        callback = function()
+            if win_split ~= 0 then
+                action()
+                cleanup()
+                win_split = 0
+            end
+            vim.api.nvim_del_autocmd(autocmdid)
+        end,
+    })
+end
+
 return GenericUI

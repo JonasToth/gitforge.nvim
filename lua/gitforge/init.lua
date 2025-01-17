@@ -293,28 +293,17 @@ end
 ---@param provider GHIssue
 function M.comment_on_issue(provider)
     local log = require("gitforge.log")
+    local generic_ui = require("gitforge.generic_ui")
 
-    local comment_file = os.tmpname()
-    log.trace_msg("Tempfile for comment: " .. comment_file)
     local comment_buf = a.nvim_create_buf(false, false)
-    local cleanup = function() os.remove(comment_file) end
     if comment_buf == 0 then
         log.notify_failure("Failed to create buffer for commenting")
-        cleanup()
-        return
-    end
-    a.nvim_buf_set_name(comment_buf, comment_file)
-
-    local win_split = require("gitforge.generic_ui").open_edit_window(comment_buf)
-    if win_split == 0 then
-        log.notify_failure("Failed to create window split for commenting")
-        cleanup()
         return
     end
 
-    vim.cmd("edit " .. comment_file)
-    -- Switch to insert mode to be ready to type the comment directly.
-    a.nvim_feedkeys(a.nvim_replace_termcodes("i", true, false, true), "n", false)
+    local comment_file = os.tmpname()
+    local cleanup = function() os.remove(comment_file) end
+    log.trace_msg("Tempfile for comment: " .. comment_file)
 
     local perform_comment = function()
         local util = require("gitforge.utility")
@@ -324,21 +313,11 @@ function M.comment_on_issue(provider)
             cleanup()
             return
         end
-        require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+        generic_ui.perform_issue_update_cmd(provider,
             function(p) return p:cmd_comment(comment_file) end)
         cleanup()
     end
-    local autocmdid
-    autocmdid = a.nvim_create_autocmd("WinLeave", {
-        group = a.nvim_create_augroup("GitForge", { clear = true }),
-        callback = function()
-            if win_split ~= 0 then
-                perform_comment()
-                win_split = 0
-            end
-            a.nvim_del_autocmd(autocmdid)
-        end
-    })
+    generic_ui.setup_file_command_on_close(comment_buf, comment_file, perform_comment, cleanup)
 end
 
 ---Called on an issue buffer. Parses out the current issue description, opens a new windows
@@ -347,10 +326,6 @@ end
 ---@param opts table Project options
 ---@param provider GHIssue
 function M.change_issue_description(opts, provider)
-    -- FIXME: The last instance of '## Comments' must be found, because the issue content
-    --        could have this line itself! The problem is, that comments themself might have
-    --        this line contained. So the last instance is wrong. Somewhere in between "smart".
-    --        The solution is likely just using a weird '## Comments' headline in rendering ...
     local log = require("gitforge.log")
     local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
@@ -361,64 +336,26 @@ function M.change_issue_description(opts, provider)
         log.notify_failure("Failed to retrieve issue number")
         return
     end
-    local full_issue_str = util.buffer_to_string(provider.buf)
-    local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
-    if idx_start_of_desc_headline == nil then
-        log.notify_failure("Failed to find headline for description in issue buffer " .. provider.buf)
-        return
-    end
 
-    local idx_newline_after_description_headline = string.find(full_issue_str, "\n", idx_start_of_desc_headline)
-    if idx_newline_after_description_headline == nil then
-        log.notify_failure("Expected a newline character after headline string in issue buffer " .. provider.buf)
-        return
-    else
-        -- Remove the two '\n' inserted after the headline.
-        idx_newline_after_description_headline = idx_newline_after_description_headline + 2
-    end
-    local idx_start_of_comments = string.find(full_issue_str, g_comments_headline_md,
-        idx_newline_after_description_headline, true)
-    if idx_start_of_comments == nil then
-        idx_start_of_comments = #full_issue_str
-    else
-        -- Remove the '\n#' of the headline and the final '\n' of the description.
-        idx_start_of_comments = idx_start_of_comments - 3
-    end
-    if idx_start_of_comments - idx_newline_after_description_headline < 2 then
-        log.notify_failure(
-            "Expected a greater distance between start of description and start of comments. Bug?! in issue buffer " ..
-            provider.buf)
+    local parsed_description = require("gitforge.generic_issue").get_description_from_issue_buffer(provider.buf)
+    if parsed_description == nil then
+        log.notify_failure("Failed to extract the description of the issue")
         return
     end
-    local parsed_description = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
     log.trace_msg(parsed_description)
+
+    local descr_edit_buf = a.nvim_create_buf(false, false)
+    if descr_edit_buf == 0 then
+        log.notify_failure("Failed to create buffer to edit description")
+        return
+    end
 
     -- open new tmp buffer, like when commenting/creating
     -- sending / changing the issue body with body-file on save-close
     local tmp_desc_file = os.tmpname()
-    local descr_edit_buf = a.nvim_create_buf(false, false)
     local cleanup = function() os.remove(tmp_desc_file) end
-    if descr_edit_buf == 0 then
-        log.notify_failure("Failed to create buffer to edit description")
-        cleanup()
-        return
-    end
-    a.nvim_buf_set_name(descr_edit_buf, tmp_desc_file)
-    if parsed_description ~= "No Description" then
-        a.nvim_buf_set_lines(descr_edit_buf, 0, -1, true, vim.split(parsed_description, '\n'))
-    else
-        parsed_description = ""
-    end
-    local win_split = generic_ui.open_edit_window(descr_edit_buf)
-    if win_split == 0 then
-        log.notify_failure("Failed to create window to edit the description")
-        cleanup()
-        return
-    end
-
-    --Populating the buffer with content requires an initial write.
-    vim.cmd("write! " .. tmp_desc_file)
-    vim.cmd("edit " .. tmp_desc_file)
+    log.trace_msg("Tempfile for description: " .. tmp_desc_file)
+    a.nvim_buf_set_lines(descr_edit_buf, 0, -1, true, vim.split(parsed_description, '\n'))
 
     local edit_description = function()
         local new_desc = util.buffer_to_string(descr_edit_buf)
@@ -428,19 +365,9 @@ function M.change_issue_description(opts, provider)
             generic_ui.perform_issue_update_cmd(provider,
                 function(p) return p:cmd_description_change(tmp_desc_file) end)
         end
-        cleanup()
     end
-    local autocmdid
-    autocmdid = a.nvim_create_autocmd("WinLeave", {
-        group = a.nvim_create_augroup("GitForge", { clear = true }),
-        callback = function()
-            if win_split ~= 0 then
-                edit_description()
-                win_split = 0
-            end
-            a.nvim_del_autocmd(autocmdid)
-        end,
-    })
+
+    generic_ui.setup_file_command_on_close(descr_edit_buf, tmp_desc_file, edit_description, cleanup)
 end
 
 function M.cached_issues_picker(provider)
@@ -512,10 +439,7 @@ function M.cached_issues_picker(provider)
                         ts.utils.warn_no_selection "Missing Issue Selection"
                         return
                     end
-                    print("TS2")
-                    print(vim.inspect(selection.value))
                     local p = provider:newIssue(selection.value.issue_number)
-                    print(vim.inspect(p))
                     M.view_issue({ project = opts.project, }, p)
                 end)
                 return true
@@ -642,7 +566,7 @@ function M.list_issues(opts, provider)
             log.ephemeral_info("Failed to retrieve issue list")
             return
         end
-        local data = vim.json.decode(handle.stdout)
+        local data = provider:convert_cmd_result_to_issue(handle.stdout)
         vim.schedule(function() create_telescope_picker_for_issue_list(data, provider) end)
     end
     local required_fields =
