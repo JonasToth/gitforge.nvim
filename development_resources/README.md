@@ -45,15 +45,26 @@ The heterogenity of the the various aspects (issues, code reviews/PRs, CI/CD) re
 structure to handle each aspect with a different "backend". The user interface _per aspect_ should
 be the same across different git forges. The module/feature set per git forge/backend may differ.
 
-- telescope integration for listing, previewing and selecting issues
-- "normal" issue interaction directly from `nvim`
+### Issues
+
+- [x] telescope integration for listing, previewing and selecting issues
+- [x] "normal" issue interaction directly from `nvim`
     - editing title, description, labels, assignee
     - adding comments
     - closing/reopening issues (or state transitions in general)
-- searching for issue
-- a bit of convenience, e.g. providing a way to custom query only issues with specific labels (bugs)
-- project, defined through path matching, specific options
-- get both Github and GitLab working
+- [ ] searching for issue by changing labels, assignees and so on interactively
+- [x] a bit of convenience, e.g. providing a way to custom query only issues with specific labels (bugs)
+- [ ]project, defined through path matching, specific options
+- [ ] get both Github and GitLab working
+
+### PRs
+
+- [ ] Listing PRs, similar to issue listing
+- [ ] Adjusting PRs
+    - editing title, description, labels, assignees, reviewers
+    - adding comments
+    - showing CI information (is this green?)
+    - completing the PR
 
 ## Far Goals
 
@@ -95,7 +106,7 @@ be the same across different git forges. The module/feature set per git forge/ba
 
 ## Motivation
 
-I never developed a plugin for `nvim` and have no prior experience in `Lua`. That will be reflected
+I never developed a plugin for `nvim` and have no prior experience in `lua`. That will be reflected
 in the code you may read :)
 The plugin serves a personal wish for tighter integration of issue work into my personal `nvim`
 workflow.
@@ -110,9 +121,5 @@ Advice, help and suggestions are always welcome!
 
 Version 1.0 is when I can perform day to day work with issues, pull requests and CI/CD interaction
 with GitHub, Bitbucket (or GitLab) and Jira. Other git forges (especially if providing a CLI tool)
-may be integrated but are second class citizens. Why? Because I don't use them.
+may be integrated but are second class citizens.
 If anyone has stakes into something else, go ahead and support me :)
-
-All features extending this base line may be developed at a much slower pace and may never
-materialize "from my hand". They are nice to haves and I will certainly not stop anyone from
-helping me out creating them. But I might not have the time and motiviation to do it myself.
