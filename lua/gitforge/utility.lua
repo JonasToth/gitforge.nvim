@@ -16,4 +16,12 @@ function M.copy_buffer(from_buf, to_buf)
     vim.api.nvim_buf_set_lines(to_buf, 0, -1, false, curr_buf_content)
 end
 
+---@param command table<string>
+---@param completion_func function
+---@return vim.SystemObj 
+function M.async_exec(command, completion_func)
+    require("gitforge.log").executed_command(command)
+    return vim.system(command, { text = true, timeout = require("gitforge").opts.timeout }, completion_func)
+end
+
 return M
