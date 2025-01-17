@@ -32,8 +32,9 @@ require("gitforge.set")
 ---@field labels table<Label> potentially empty list of assigned labels.
 ---@field comments table<Comment>?
 
-local g_description_headline_md = '## Description'
-local g_comments_headline_md = '## Comments'
+local g_description_headline_md = "## Description"
+local g_comments_headline_md = "## Comments"
+local g_description_empty_md = "No Description"
 
 --- Renders the issue content into a buffer as markdown.
 --- @param buf integer Buffer-Id to work on. If `nil`, a new buffer is created.
@@ -196,6 +197,53 @@ function GenericIssue.get_assignee_from_issue_buffer(buf)
         return Set:new()
     else
         return Set:createFromCSVList(assignees)
+    end
+end
+
+---@param buf integer Buffer-ID of the issue
+---@return string|nil description String of the issue description.
+function GenericIssue.get_description_from_issue_buffer(buf)
+    -- FIXME: The last instance of '## Comments' must be found, because the issue content
+    --        could have this line itself! The problem is, that comments themself might have
+    --        this line contained. So the last instance is wrong. Somewhere in between "smart".
+    --        The solution is likely just using a weird '## Comments' headline in rendering ...
+    local log = require("gitforge.log")
+    local util = require("gitforge.utility")
+
+    local full_issue_str = util.buffer_to_string(buf)
+    local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
+    if idx_start_of_desc_headline == nil then
+        log.trace_msg("Failed to find headline for description in issue buffer " .. buf)
+        return nil
+    end
+
+    local idx_newline_after_description_headline = string.find(full_issue_str, "\n", idx_start_of_desc_headline)
+    if idx_newline_after_description_headline == nil then
+        log.trace_msg("Expected a newline character after headline string in issue buffer " .. buf)
+        return nil
+    else
+        -- Remove the two '\n' inserted after the headline.
+        idx_newline_after_description_headline = idx_newline_after_description_headline + 2
+    end
+    local idx_start_of_comments = string.find(full_issue_str, g_comments_headline_md,
+        idx_newline_after_description_headline, true)
+    if idx_start_of_comments == nil then
+        idx_start_of_comments = #full_issue_str
+    else
+        -- Remove the '\n#' of the headline and the final '\n' of the description.
+        idx_start_of_comments = idx_start_of_comments - 3
+    end
+    if idx_start_of_comments - idx_newline_after_description_headline < 2 then
+        log.trace_msg(
+            "Expected a greater distance between start of description and start of comments. Bug?! in issue buffer " ..
+            buf)
+        return nil
+    end
+    local desc = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
+    if desc == g_description_empty_md then
+        return ""
+    else
+        return desc
     end
 end
 
