@@ -1,7 +1,5 @@
 local M = {}
 local a = vim.api
-local g_description_headline_md = '## Description'
-local g_comments_headline_md = '## Comments'
 
 ---@param opts table
 function M.setup(opts)
@@ -29,14 +27,7 @@ function M.setup(opts)
     end)
 
     vim.keymap.set("n", "<leader>qc", M.cached_issues_picker)
-
-    vim.keymap.set("n", "<leader>qa", function()
-        M.get_labels()
-    end)
-
-    vim.keymap.set("n", "<leader>qn", function()
-        M.create_issue(M.opts, provider)
-    end)
+    vim.keymap.set("n", "<leader>qn", function() M.create_issue(M.opts, provider) end)
 end
 
 ---@param opts table
@@ -151,39 +142,6 @@ function M.set_issue_buffer_options(provider)
         key_opts_from_desc("Edit State - Reopen/Close"))
 end
 
--- Returns the issue labels of the current project.
-function M.get_labels()
-    local log = require("gitforge.log")
-    local selected_labels = {}
-    local on_choice = function(choice)
-        print(choice)
-        table.insert(selected_labels, choice)
-    end
-    local handle_labels = function(handle)
-        if handle.code ~= 0 then
-            log.notify_failure("Failed to query Labels:\n" .. handle.stderr)
-            return
-        end
-        vim.schedule(function()
-            local label_list_json = vim.fn.json_decode(handle.stdout)
-            if label_list_json == nil then
-                log.notify_failure("Failed to parse JSON response for labels")
-                return
-            end
-            vim.ui.select(label_list_json, {
-                prompt = "Select Label",
-                format_item = function(label_element) return label_element["name"] end
-            }, on_choice)
-        end)
-    end
-    local gh_call = { "gh", "label", "list", "--json", "name,color,description" }
-    log.executed_command(gh_call)
-    local output = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_labels)
-    output:wait()
-
-    return selected_labels
-end
-
 -- Creates a new issue by prompting for the title. The description is written in a new buffer.
 ---@param opts table
 ---@param provider GHIssue
@@ -203,82 +161,40 @@ function M.create_issue(opts, provider)
             log.notify_failure("Failed to create issue: \n" .. handle.stderr)
             return
         end
-        vim.schedule(function()
-            local lines = vim.split(handle.stdout, "\n")
-            local issue_link
-            for index, value in ipairs(lines) do
-                if index == 1 then
-                    issue_link = value
-                    break
-                end
+        local lines = vim.split(handle.stdout, "\n")
+        local issue_link
+        for index, value in ipairs(lines) do
+            if index == 1 then
+                issue_link = value
+                break
             end
-            if issue_link == nil or #issue_link == 0 then
-                log.notify_failure("Failed to retrieve issue link for new issue")
-                log.trace_msg(vim.join(lines, "\n"))
-                return
-            end
-            local url_elements = vim.split(issue_link, "/")
-            local id
-            for index, value in ipairs(url_elements) do
-                if index == 7 then
-                    id = value
-                    break
-                end
-            end
-            if id == nil or #id == 0 then
-                log.notify_failure("Failed to extract issue id from URL")
-                log.trace_msg(vim.join(url_elements, " : "))
-                return
-            end
-            local int_id = tonumber(id)
-            if int_id == nil then
-                log.notify_failure("Failed to parse id-string as int")
-                log.trace_msg(id)
-                return
-            end
-            local p = provider:newIssue(tostring(int_id))
-            M.view_issue(opts, p)
-        end)
+        end
+        if issue_link == nil or #issue_link == 0 then
+            log.notify_failure("Failed to retrieve issue link for new issue")
+            log.trace_msg(vim.join(lines, "\n"))
+            return
+        end
+        local p = provider:newFromLink(issue_link)
+        if p == nil then
+            return
+        end
+        M.view_issue(opts, p)
     end
     local create_issue_call = function()
-        local gh_call = { "gh", "issue", "create", "--title", title, "--body-file", description_file }
-        log.executed_command(gh_call)
-        vim.system(gh_call, { text = true, timeout = opts.timeout }, show_issue_after_creation)
+        local cmd = provider:cmd_create_issue(title, description_file)
+        log.executed_command(cmd)
+        vim.system(cmd, { text = true, timeout = opts.timeout }, show_issue_after_creation)
     end
     local write_description_in_tmp_buffer = function()
-        description_file = os.tmpname()
         local buf = a.nvim_create_buf(false, false)
-        log.trace_msg("Created buffer and tempfile for it")
         if buf == 0 then
             log.notify_failure("Failed to create buffer to write the description.")
             return
         end
-        a.nvim_buf_set_name(buf, description_file)
+        description_file = os.tmpname()
 
-        local win_split = require("gitforge.generic_ui").open_edit_window(buf)
-        if win_split == 0 then
-            log.notify_failure("Failed to create window split for writing the description.")
-            return
-        end
-
-        log.trace_msg("Created win split for tmpfile buffer")
-
-        vim.cmd("edit " .. description_file)
-        -- Switch to insert mode to be ready to type the comment directly.
-        a.nvim_feedkeys(a.nvim_replace_termcodes("i", true, false, true), "n", false)
-
-        local autocmdid
-        autocmdid = a.nvim_create_autocmd("WinLeave", {
-            -- group = a.nvim_create_augroup("GitForge", { clear = true }),
-            callback = function()
-                log.trace_msg("Callback on WinLeave is called")
-                if win_split ~= 0 then
-                    create_issue_call()
-                    win_split = 0
-                end
-                a.nvim_del_autocmd(autocmdid)
-            end
-        })
+        require("gitforge.generic_ui").setup_file_command_on_close(buf, description_file, true, create_issue_call,
+            cleanup_description_file)
     end
     local continuation_after_title_prompt = function(input)
         if input == nil or input == "" then
@@ -317,7 +233,7 @@ function M.comment_on_issue(provider)
             function(p) return p:cmd_comment(comment_file) end)
         cleanup()
     end
-    generic_ui.setup_file_command_on_close(comment_buf, comment_file, perform_comment, cleanup)
+    generic_ui.setup_file_command_on_close(comment_buf, comment_file, true, perform_comment, cleanup)
 end
 
 ---Called on an issue buffer. Parses out the current issue description, opens a new windows
@@ -367,7 +283,7 @@ function M.change_issue_description(opts, provider)
         end
     end
 
-    generic_ui.setup_file_command_on_close(descr_edit_buf, tmp_desc_file, edit_description, cleanup)
+    generic_ui.setup_file_command_on_close(descr_edit_buf, tmp_desc_file, false, edit_description, cleanup)
 end
 
 function M.cached_issues_picker(provider)
@@ -569,25 +485,7 @@ function M.list_issues(opts, provider)
         local data = provider:convert_cmd_result_to_issue(handle.stdout)
         vim.schedule(function() create_telescope_picker_for_issue_list(data, provider) end)
     end
-    local required_fields =
-    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
-    local gh_call = { "gh", "issue", "list", "--state", "all", "--json", required_fields }
-    if opts.project then
-        table.insert(gh_call, "-R")
-        table.insert(gh_call, opts.project)
-    end
-    if opts.limit then
-        table.insert(gh_call, "--limit")
-        table.insert(gh_call, tostring(opts.limit))
-    end
-    if opts.labels then
-        table.insert(gh_call, "--label")
-        table.insert(gh_call, opts.labels)
-    end
-    if opts.assignee then
-        table.insert(gh_call, "--assignee")
-        table.insert(gh_call, opts.assignee)
-    end
+    local gh_call = provider:cmd_list_issues(opts)
     log.executed_command(gh_call)
     local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_telescope_list)
     call_handle:wait()
