@@ -1,5 +1,4 @@
 local M = {}
-local a = vim.api
 
 ---@class GForgeIssueKeys
 ---Defines key binds for issue buffers.
@@ -45,32 +44,24 @@ function M.setup(opts)
 
     M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
 
-    -- a.nvim_create_user_command("GH", M.handle_command, {})
-    local provider = require(M.opts.default_issue_provider)
-    local ia = require("gitforge.issue_actions")
-    vim.keymap.set("n", "<leader>ql", function()
-        ia.list_issues({
-            -- project = "llvm/llvm-project",
-            -- labels = "clang-tidy",
-            limit = 50,
-            -- assignee = "@me",
-        }, provider)
-    end)
-    vim.keymap.set("n", "<leader>qc", function() ia.list_cached_issues(provider) end)
-    vim.keymap.set("n", "<leader>qn", function() ia.create_issue(provider) end)
+    vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
+    vim.api.nvim_create_user_command("GForgeCachedIssues", M.list_cached_issues, {})
+    vim.api.nvim_create_user_command("GForgeCreateIssue", M.create_issue, {})
 end
 
----@param opts table
-function M.handle_command(opts)
-    local subcommands = {}
-    for s in opts.args:gmatch("[^ ]+") do
-        table.insert(subcommands, s)
-    end
-    for _, command in ipairs(subcommands) do
-        if command == "list-labels" then
-            M.get_labels()
-        end
-    end
+function M.list_issues(args)
+    local provider = require(M.opts.default_issue_provider)
+    require("gitforge.issue_actions").list_issues({}, provider)
+end
+
+function M.list_cached_issues(args)
+    local provider = require(M.opts.default_issue_provider)
+    require("gitforge.issue_actions").list_cached_issues(provider)
+end
+
+function M.create_issue(args)
+    local provider = require(M.opts.default_issue_provider)
+    require("gitforge.issue_actions").create_issue(provider)
 end
 
 return M

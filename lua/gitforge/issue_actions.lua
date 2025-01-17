@@ -251,11 +251,12 @@ function IssueActions.create_issue(provider)
             log.trace_msg(vim.join(lines, "\n"))
             return
         end
+        log.notify_change("Created a new issue")
         local p = provider:newFromLink(issue_link)
         if p == nil then
             return
         end
-        IssueActions.view_issue(p)
+        vim.schedule(function() IssueActions.view_issue(p) end)
     end
     local create_issue_call = function()
         local cmd = provider:cmd_create_issue(title, description_file)

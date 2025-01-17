@@ -4,13 +4,13 @@ local Log = {}
 ---even have it in a log (e.g. notification log)
 ---@param what_happened string Human readable information on what changed.
 function Log.notify_change(what_happened)
-   vim.notify(what_happened, vim.log.levels.INFO, {})
+    vim.schedule(function() vim.notify(what_happened, vim.log.levels.INFO, {}) end)
 end
 
 ---Signal that an action failed to complete successfully. This is not a detailed error message.
 ---@param what_happened string Human readable information on what changed.
 function Log.notify_failure(what_happened)
-    vim.notify(what_happened, vim.log.levels.ERROR, {})
+    vim.schedule(function() vim.notify(what_happened, vim.log.levels.ERROR, {}) end)
 end
 
 ---Useful to signal noops or signal ineffective actions.

@@ -97,7 +97,7 @@ function GenericUI.refresh_issue(provider, completion)
                 log.ephemeral_info("Updated content for issue " .. provider.issue_number)
 
                 if completion ~= nil then
-                    completion(provider, issue)
+                    completion(provider)
                 end
             end)
         end)
