@@ -1,6 +1,5 @@
 local M = {}
 local a = vim.api
-local forge_issue_pattern = '[Issue] #'
 local g_description_headline_md = '## Description'
 local g_comments_headline_md = '## Comments'
 
@@ -51,23 +50,6 @@ function M.handle_command(opts)
     end
 end
 
----Finds an existing buffer that holds @c issue_number.
----@param issue_number number
----@return integer buf_id if a matching buffer is found, otherwise @c 0
-local find_existing_issue_buffer = function(issue_number)
-    local title_id = forge_issue_pattern .. tostring(issue_number)
-    local all_bufs = a.nvim_list_bufs()
-
-    for _, buf_id in pairs(all_bufs) do
-        local buf_name = a.nvim_buf_get_name(buf_id)
-        local found = string.find(buf_name, title_id, 1, true)
-        if found ~= nil then
-            return buf_id
-        end
-    end
-    return 0
-end
-
 --- Parses the buffer name and tries to retrieve the issue number and project.
 ---@param buf number Buffer Id for the issue buffer
 local get_issue_id_from_buf = function(buf)
@@ -78,24 +60,6 @@ local get_issue_id_from_buf = function(buf)
     for nbr in buf_name:gmatch("#(%d+)") do
         return nbr
     end
-end
-
-local set_buffer_options_for_edit = function(buf)
-    a.nvim_set_option_value('readonly', false, { buf = buf })
-    a.nvim_set_option_value('modifiable', true, { buf = buf })
-    a.nvim_set_option_value('bufhidden', 'delete', { buf = buf })
-    a.nvim_set_option_value('buflisted', false, { buf = buf })
-    a.nvim_set_option_value('buftype', '', { buf = buf })
-    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
-    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
-    a.nvim_set_option_value('swapfile', false, { buf = buf })
-end
-
-local open_edit_window = function(buf)
-    local win_split = a.nvim_open_win(buf, true, {
-        split = "below",
-    })
-    return win_split
 end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
@@ -198,26 +162,6 @@ local set_issue_buffer_options = function(buf)
             M.change_issue_state(buf, M.opts)
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
-end
-
-local buffer_to_string = function(buf)
-    local curr_buf_content = a.nvim_buf_get_lines(buf, 0, -1, false)
-    return vim.trim(vim.fn.join(curr_buf_content, "\n"))
-end
-
-local copy_buffer = function(from_buf, to_buf)
-    local curr_buf_content = a.nvim_buf_get_lines(from_buf, 0, -1, false)
-    a.nvim_buf_set_lines(to_buf, 0, -1, false, curr_buf_content)
-end
---- Returns the standardized title of an issue.
---- @param issue_json table Table representation of the issue JSON.
---- @return string Concatentation of issue number and a shortened title.
-local issue_title_ui = function(issue_json)
-    local length_threshold = 50
-    local shortened_title = string.sub(issue_json.title, 1, length_threshold)
-    local title_id = forge_issue_pattern .. tostring(issue_json.number)
-    local three_dots = #issue_json.title > length_threshold and "..." or ""
-    return title_id .. " - " .. shortened_title .. three_dots
 end
 
 --- Renders the issue content into a buffer as markdown.
@@ -470,9 +414,8 @@ function M.create_issue(opts)
             return
         end
         a.nvim_buf_set_name(buf, description_file)
-        set_buffer_options_for_edit(buf)
 
-        local win_split = open_edit_window(buf)
+        local win_split = require("gitforge.generic_ui").open_edit_window(buf)
         if win_split == 0 then
             log.notify_failure("Failed to create window split for writing the description.")
             return
@@ -509,6 +452,8 @@ end
 
 function M.comment_on_issue(issue_number)
     local log = require("gitforge.log")
+    local generic_ui = require("gitforge.generic_ui")
+
     local comment_file = os.tmpname()
     log.trace_msg("Tempfile for comment: " .. comment_file)
     local comment_buf = a.nvim_create_buf(false, false)
@@ -519,9 +464,8 @@ function M.comment_on_issue(issue_number)
         return
     end
     a.nvim_buf_set_name(comment_buf, comment_file)
-    set_buffer_options_for_edit(comment_buf)
 
-    local win_split = open_edit_window(comment_buf)
+    local win_split = require("gitforge.generic_ui").open_edit_window(comment_buf)
     if win_split == 0 then
         log.notify_failure("Failed to create window split for commenting")
         cleanup()
@@ -533,7 +477,8 @@ function M.comment_on_issue(issue_number)
     a.nvim_feedkeys(a.nvim_replace_termcodes("i", true, false, true), "n", false)
 
     local perform_comment = function()
-        local str = buffer_to_string(comment_buf)
+        local util = require("gitforge.utility")
+        local str = util.buffer_to_string(comment_buf)
         if #str == 0 then
             log.ephemeral_info("Aborted commenting with empty content")
             cleanup()
@@ -553,7 +498,7 @@ function M.comment_on_issue(issue_number)
                 perform_comment()
                 win_split = 0
 
-                local buf = find_existing_issue_buffer(issue_number)
+                local buf = generic_ui.find_existing_issue_buffer(issue_number)
                 M.update_issue_buffer(buf)
             end
             a.nvim_del_autocmd(autocmdid)
@@ -571,13 +516,14 @@ function M.change_issue_description(buf, opts)
     --        this line contained. So the last instance is wrong. Somewhere in between "smart".
     --        The solution is likely just using a weird '## Comments' headline in rendering ...
     local log = require("gitforge.log")
+    local util = require("gitforge.utility")
     log.trace_msg("Edit Issue Description")
     local issue_number = get_issue_id_from_buf(buf)
     if issue_number == nil then
         log.notify_failure("Failed to retrieve issue number for issue in buffer " .. buf)
         return
     end
-    local full_issue_str = buffer_to_string(buf)
+    local full_issue_str = util.buffer_to_string(buf)
     local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
     if idx_start_of_desc_headline == nil then
         log.notify_failure("Failed to find headline for description in issue buffer " .. buf)
@@ -625,20 +571,19 @@ function M.change_issue_description(buf, opts)
     else
         parsed_description = ""
     end
-    set_buffer_options_for_edit(descr_edit_buf)
-
-    local win_split = open_edit_window(descr_edit_buf)
+    local win_split = require("gitforge.generic_ui").open_edit_window(descr_edit_buf)
     if win_split == 0 then
         log.notify_failure("Failed to create window to edit the description")
         cleanup()
         return
     end
 
+    --Populating the buffer with content requires an initial write.
     vim.cmd("write! " .. tmp_desc_file)
     vim.cmd("edit " .. tmp_desc_file)
 
     local edit_description = function()
-        local new_desc = buffer_to_string(descr_edit_buf)
+        local new_desc = util.buffer_to_string(descr_edit_buf)
         if new_desc == parsed_description then
             log.ephemeral_info("No update to the description occured.")
         else
@@ -719,6 +664,8 @@ function M.cached_issues_picker()
     local make_entry = require("telescope.make_entry")
     local opts = {}
 
+    local util = require("gitforge.utility")
+
     local bufnrs = vim.tbl_filter(function(bufnr)
         local bufname = a.nvim_buf_get_name(bufnr)
         return string.find(bufname, "[Issue]", 1, true) ~= nil
@@ -763,7 +710,7 @@ function M.cached_issues_picker()
                 title = "Issue Preview",
                 define_preview = function(self, entry)
                     a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                    copy_buffer(entry.bufnr, self.state.bufnr)
+                    util.copy_buffer(entry.bufnr, self.state.bufnr)
                 end,
             }),
             sorter = config.generic_sorter(opts),
@@ -795,6 +742,9 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
     local previewers = require("telescope.previewers")
     local make_entry = require("telescope.make_entry")
     local opts = {}
+
+    local util = require("gitforge.utility")
+    local generic_ui = require("gitforge.generic_ui")
 
     pickers.new(opts, {
         prompt_title = "Issue List",
@@ -849,7 +799,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
         previewer = previewers.new_buffer_previewer({
             title = "Issue Preview",
             define_preview = function(self, entry)
-                local buf = find_existing_issue_buffer(entry.number)
+                local buf = generic_ui.find_existing_issue_buffer(entry.number)
 
                 -- The issue was not rendered before. Render it for the previewer, but also
                 -- cache the content in a buffer.
@@ -860,14 +810,14 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
 
                     -- Cache for snappy opening.
                     buf = M.render_issue_to_buffer(buf, entry.value)
-                    local title_ui = issue_title_ui(entry.value)
+                    local title_ui = generic_ui.issue_title_ui(entry.value)
                     a.nvim_buf_set_name(buf, title_ui)
                     set_issue_buffer_options(buf)
                 else
                     -- Display the previously rendered content for the issue. Comments will be
                     -- present in this case.
                     a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                    copy_buffer(buf, self.state.bufnr)
+                    util.copy_buffer(buf, self.state.bufnr)
                 end
             end
         }),
@@ -924,50 +874,6 @@ function M.list_issues(opts)
     call_handle:wait()
 end
 
----Creates a floating window for @c buf with the title @c title_ui
----Creates an autocommand to close the floating window if it looses focus.
----@param buf number Buffer-ID to display in the window.
----@param title_ui string Human Readable title for the window.
-local create_issue_window = function(buf, title_ui)
-    local width = math.ceil(math.min(vim.o.columns, math.min(100, vim.o.columns - 20)))
-    local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
-    local row = math.ceil(vim.o.lines - height) * 0.5 - 1
-    local col = math.ceil(vim.o.columns - width) * 0.5 - 1
-    local win_options = {
-        -- 'relative' creates a floating window
-        relative = 'editor',
-        title = title_ui,
-        title_pos = 'center',
-        width = width,
-        height = height,
-        col = col,
-        row = row,
-        border = "single"
-    }
-    local win = a.nvim_open_win(buf, true, win_options)
-    if win == 0 then
-        require("gitforge.log").notify_failure("Failed to open float for issue")
-        return
-    end
-    -- Switch to normal mode - Telescope selection leaves in insert mode?!
-    a.nvim_feedkeys(a.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
-    -- FIXME: This autocmd definition fails with vim.ui.input() Calls.
-    --        The window is closed, even though it should still exist.
-    --        Use <C-W>p to switch to the previous window if moving out of the float.
-    -- -- Automatically close then float when it is left.
-    -- local autocmdid
-    -- autocmdid = a.nvim_create_autocmd("WinLeave", {
-    --     -- group = a.nvim_create_augroup("GitForge", { clear = true }),
-    --     callback = function()
-    --         if win ~= 0 then
-    --             a.nvim_win_close(win, true)
-    --             win = 0
-    --         end
-    --         a.nvim_del_autocmd(autocmdid)
-    --     end
-    -- })
-end
-
 function M.fetch_issue_call(issue_number, opts)
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
@@ -981,6 +887,7 @@ end
 
 function M.update_issue_buffer(buf)
     local log = require("gitforge.log")
+    local generic_ui = require("gitforge.generic_ui")
     local opts = {}
     local issue_number = get_issue_id_from_buf(buf)
     local gh_call = M.fetch_issue_call(issue_number, opts)
@@ -997,7 +904,7 @@ function M.update_issue_buffer(buf)
                 log.trace_msg("update single issue in buf: " .. tostring(buf))
                 buf = M.render_issue_to_buffer(buf, issue_json)
 
-                local title_ui = issue_title_ui(issue_json)
+                local title_ui = generic_ui.issue_title_ui(issue_json)
                 a.nvim_buf_set_name(buf, title_ui)
                 set_issue_buffer_options(buf)
                 log.ephemeral_info("Updated content for issue " .. issue_number)
@@ -1007,7 +914,9 @@ end
 
 function M.view_issue(issue_number, opts)
     local log = require("gitforge.log")
-    local buf = find_existing_issue_buffer(issue_number)
+    local generic_ui = require("gitforge.generic_ui")
+
+    local buf = generic_ui.find_existing_issue_buffer(issue_number)
 
     local open_buffer_with_issue = function(handle)
         if handle.code ~= 0 then
@@ -1020,11 +929,11 @@ function M.view_issue(issue_number, opts)
             log.trace_msg("view single issue in buf: " .. tostring(buf))
             buf = M.render_issue_to_buffer(buf, data)
 
-            local title_ui = issue_title_ui(data)
+            local title_ui = generic_ui.issue_title_ui(data)
             a.nvim_buf_set_name(buf, title_ui)
             set_issue_buffer_options(buf)
 
-            create_issue_window(buf, title_ui)
+            generic_ui.create_issue_window(buf, title_ui)
         end)
     end
 
@@ -1038,7 +947,7 @@ function M.view_issue(issue_number, opts)
     else
         log.trace_msg("Found issue in buffer - displaying old state and triggering update")
         local title_ui = a.nvim_buf_get_name(buf)
-        create_issue_window(buf, title_ui)
+        generic_ui.create_issue_window(buf, title_ui)
 
         -- Trigger an update after already opening the issue in a window.
         log.executed_command(gh_call)
