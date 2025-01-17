@@ -124,6 +124,40 @@ function GenericIssue.render_issue_to_buffer(buf, issue)
     return buf
 end
 
+---Changes the buffer options for @c buf to be unchangeable by normal operations.
+---Additionally, set buffer key mappings for user interface.
+---@param provider GHIssue Buffer ID to work on.
+function GenericIssue.set_issue_buffer_options(provider)
+    vim.api.nvim_set_option_value('readonly', true, { buf = provider.buf })
+    vim.api.nvim_set_option_value('buftype', 'nowrite', { buf = provider.buf })
+    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = provider.buf })
+    vim.api.nvim_set_option_value('syntax', 'markdown', { buf = provider.buf })
+
+    local key_opts_from_desc = function(description)
+        return { buffer = provider.buf, nowait = true, desc = description, silent = true }
+    end
+    vim.keymap.set("n", "<localleader>q", ":close<CR>", key_opts_from_desc("Close Issue"))
+    vim.keymap.set("n", "<localleader>u", function()
+            require("gitforge.generic_ui").refresh_issue(provider)
+            require("gitforge.log").notify_change("Updated the issue buffer")
+        end,
+        key_opts_from_desc("Update Issue"))
+
+    local ia = require("gitforge.issue_actions")
+    vim.keymap.set("n", "<localleader>c", function() ia.comment_on_issue(provider) end,
+        key_opts_from_desc("Comment on Issue"))
+    vim.keymap.set("n", "<localleader>t", function() ia.change_issue_title(provider) end,
+        key_opts_from_desc("Change Title"))
+    vim.keymap.set("n", "<localleader>l", function() ia.change_issue_labels(provider) end,
+        key_opts_from_desc("Change Labels"))
+    vim.keymap.set("n", "<localleader>a", function() ia.change_issue_assignees(provider) end,
+        key_opts_from_desc("Assign Issue"))
+    vim.keymap.set("n", "<localleader>e", function() ia.change_issue_description(provider) end,
+        key_opts_from_desc("Edit Issue Body"))
+    vim.keymap.set("n", "<localleader>s", function() ia.change_issue_state(provider) end,
+        key_opts_from_desc("Edit State - Reopen/Close"))
+end
+
 --- Parses the buffer name and tries to retrieve the issue number and project.
 ---@param buf number Buffer Id for the issue buffer
 function GenericIssue.get_issue_id_from_buf(buf)
