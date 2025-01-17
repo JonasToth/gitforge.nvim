@@ -113,13 +113,15 @@ function GenericUI.refresh_issue(provider, completion)
                 return
             end
             vim.schedule(function()
+                local generic_issue = require("gitforge.generic_issue")
+
                 local issue = provider:convert_cmd_result_to_issue(handle.stdout)
                 log.trace_msg("update single issue in buf: " .. tostring(provider.buf))
-                provider.buf = require("gitforge.generic_issue").render_issue_to_buffer(provider.buf, issue)
+                provider.buf = generic_issue.render_issue_to_buffer(provider.buf, issue)
 
                 local title_ui = require("gitforge.generic_ui").issue_title_ui(issue)
                 vim.api.nvim_buf_set_name(provider.buf, title_ui)
-                require("gitforge").set_issue_buffer_options(provider)
+                generic_issue.set_issue_buffer_options(provider)
                 log.ephemeral_info("Updated content for issue " .. provider.issue_number)
 
                 if completion ~= nil then

@@ -55,6 +55,10 @@ function IssueActions.change_issue_title(provider)
                 log.ephemeral_info("Aborted input")
                 return
             end
+            if input == headline then
+                log.ephemeral_info("Title did not change")
+                return
+            end
             change_title(input, provider)
         end)
 end
@@ -108,7 +112,7 @@ local change_assignees = function(previous, new, provider)
 end
 
 ---@param provider GHIssue
-function M.change_issue_assignees(provider)
+function IssueActions.change_issue_assignees(provider)
     local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(provider.buf)
     if previous_assignees == nil then
         return
@@ -146,7 +150,7 @@ function IssueActions.change_issue_description(provider)
     end
     log.trace_msg(parsed_description)
 
-    local descr_edit_buf = a.nvim_create_buf(false, false)
+    local descr_edit_buf = vim.api.nvim_create_buf(false, false)
     if descr_edit_buf == 0 then
         log.notify_failure("Failed to create buffer to edit description")
         return
@@ -157,7 +161,7 @@ function IssueActions.change_issue_description(provider)
     local tmp_desc_file = os.tmpname()
     local cleanup = function() os.remove(tmp_desc_file) end
     log.trace_msg("Tempfile for description: " .. tmp_desc_file)
-    a.nvim_buf_set_lines(descr_edit_buf, 0, -1, true, vim.split(parsed_description, '\n'))
+    vim.api.nvim_buf_set_lines(descr_edit_buf, 0, -1, true, vim.split(parsed_description, '\n'))
 
     local edit_description = function()
         local new_desc = util.buffer_to_string(descr_edit_buf)
