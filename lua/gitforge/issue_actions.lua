@@ -210,14 +210,12 @@ function IssueActions.view_issue(provider)
 
     provider.buf = generic_ui.find_existing_issue_buffer(provider.issue_number)
     if provider.buf == 0 then
-        generic_ui.refresh_issue(provider, function(p, issue)
-            local title_ui = generic_ui.issue_title_ui(issue)
-            generic_ui.create_issue_window(p.buf, title_ui)
+        generic_ui.refresh_issue(provider, function(p)
+            generic_ui.create_issue_window(p.buf)
         end):wait()
     else
         log.trace_msg("Found issue in buffer - displaying old state and triggering update")
-        local title_ui = vim.api.nvim_buf_get_name(provider.buf)
-        generic_ui.create_issue_window(provider.buf, title_ui)
+        generic_ui.create_issue_window(provider.buf)
         generic_ui.refresh_issue(provider)
     end
 end

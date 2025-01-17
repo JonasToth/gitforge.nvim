@@ -27,8 +27,7 @@ end
 ---Creates a floating window for @c buf with the title @c title_ui
 ---Creates an autocommand to close the floating window if it looses focus.
 ---@param buf number Buffer-ID to display in the window.
----@param title_ui string Human Readable title for the window.
-function GenericUI.create_issue_window(buf, title_ui)
+function GenericUI.create_issue_window(buf)
     local win_options = {
         split = "above",
     }
@@ -39,21 +38,6 @@ function GenericUI.create_issue_window(buf, title_ui)
     end
     -- Switch to normal mode - Telescope selection leaves in insert mode?!
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
-    -- FIXME: This autocmd definition fails with vim.ui.input() Calls.
-    --        The window is closed, even though it should still exist.
-    --        Use <C-W>p to switch to the previous window if moving out of the float.
-    -- -- Automatically close then float when it is left.
-    -- local autocmdid
-    -- autocmdid = a.nvim_create_autocmd("WinLeave", {
-    --     -- group = a.nvim_create_augroup("GitForge", { clear = true }),
-    --     callback = function()
-    --         if win ~= 0 then
-    --             a.nvim_win_close(win, true)
-    --             win = 0
-    --         end
-    --         a.nvim_del_autocmd(autocmdid)
-    --     end
-    -- })
 end
 
 --- Returns the standardized title of an issue.
