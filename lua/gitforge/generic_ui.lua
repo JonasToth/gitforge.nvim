@@ -1,4 +1,7 @@
-local GenericUI = {}
+local GenericUI = {
+    ---Constant to identify issue buffers.
+    forge_issue_pattern = '[Issue] #'
+}
 
 local set_buffer_options_for_edit = function(buf)
     vim.api.nvim_set_option_value('readonly', false, { buf = buf })
@@ -26,20 +29,8 @@ end
 ---@param buf number Buffer-ID to display in the window.
 ---@param title_ui string Human Readable title for the window.
 function GenericUI.create_issue_window(buf, title_ui)
-    local width = math.ceil(math.min(vim.o.columns, math.min(100, vim.o.columns - 20)))
-    local height = math.ceil(math.min(vim.o.lines, math.max(20, vim.o.lines - 10)))
-    local row = math.ceil(vim.o.lines - height) * 0.5 - 1
-    local col = math.ceil(vim.o.columns - width) * 0.5 - 1
     local win_options = {
-        -- 'relative' creates a floating window
-        relative = 'editor',
-        title = title_ui,
-        title_pos = 'center',
-        width = width,
-        height = height,
-        col = col,
-        row = row,
-        border = "single"
+        split = "above",
     }
     local win = vim.api.nvim_open_win(buf, true, win_options)
     if win == 0 then
@@ -65,16 +56,13 @@ function GenericUI.create_issue_window(buf, title_ui)
     -- })
 end
 
----Constant to identify issue buffers.
-local forge_issue_pattern = '[Issue] #'
-
 --- Returns the standardized title of an issue.
 --- @param issue_json Issue Table representation of the issue JSON.
 --- @return string title concatenation of issue number and a shortened title.
 function GenericUI.issue_title_ui(issue_json)
     local length_threshold = 50
     local shortened_title = string.sub(issue_json.title, 1, length_threshold)
-    local title_id = forge_issue_pattern .. tostring(issue_json.number)
+    local title_id = GenericUI.forge_issue_pattern .. tostring(issue_json.number)
     local three_dots = #issue_json.title > length_threshold and "..." or ""
     return title_id .. " - " .. shortened_title .. three_dots
 end
@@ -86,7 +74,7 @@ function GenericUI.find_existing_issue_buffer(issue_number)
     if issue_number == nil then
         return 0
     end
-    local title_id = forge_issue_pattern .. issue_number
+    local title_id = GenericUI.forge_issue_pattern .. issue_number
     local all_bufs = vim.api.nvim_list_bufs()
 
     for _, buf_id in pairs(all_bufs) do
