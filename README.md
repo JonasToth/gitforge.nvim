@@ -14,6 +14,7 @@ Read more about the goals and development milestones under [development resource
 
 **[lazy.nvim](https://github.com/folke/lazy.nvim)**
 <details>
+
 ```lua
 local ia = "gitforge.issue_actions"
 return {
@@ -42,6 +43,7 @@ return {
     opts = {},
 }
 ```
+
 </details>
 
 Please call any of the following commands  to see if any issues are detected by the plugin:
