@@ -3,28 +3,29 @@ local a = vim.api
 local g_description_headline_md = '## Description'
 local g_comments_headline_md = '## Comments'
 
+---@param opts table
 function M.setup(opts)
     M.opts = opts or {}
     if M.opts.timeout == nil then
-        M.opts.timeout = 2000
+        M.opts.timeout = 5000
     end
     -- a.nvim_create_user_command("GH", M.handle_command, {})
-
+    local provider = require("gitforge.gh.issue")
     vim.keymap.set("n", "<leader>ql", function()
         M.list_issues({
             -- project = "llvm/llvm-project",
             -- filter_labels = "clang-tidy",
             limit = 50,
             -- assignee = "@me",
-        })
+        }, provider)
     end)
     vim.keymap.set("n", "<leader>qi", function()
-        M.view_issue("2", {
+        M.view_issue({
             -- project = "llvm/llvm-project",
             -- project = "JonasToth/dotfiles"
             -- issue_nbr = "56777",
             -- issue_nbr = "102983",
-        })
+        }, provider:newIssue("2"))
     end)
 
     vim.keymap.set("n", "<leader>qc", M.cached_issues_picker)
@@ -34,10 +35,11 @@ function M.setup(opts)
     end)
 
     vim.keymap.set("n", "<leader>qn", function()
-        M.create_issue(M.opts)
+        M.create_issue(M.opts, provider)
     end)
 end
 
+---@param opts table
 function M.handle_command(opts)
     local subcommands = {}
     for s in opts.args:gmatch("[^ ]+") do
@@ -52,33 +54,33 @@ end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
----@param buf number Buffer ID to work on.
-local set_issue_buffer_options = function(buf)
-    a.nvim_set_option_value('readonly', true, { buf = buf })
-    a.nvim_set_option_value('buftype', 'nowrite', { buf = buf })
-    a.nvim_set_option_value('filetype', 'markdown', { buf = buf })
-    a.nvim_set_option_value('syntax', 'markdown', { buf = buf })
+---@param provider GHIssue Buffer ID to work on.
+function M.set_issue_buffer_options(provider)
+    a.nvim_set_option_value('readonly', true, { buf = provider.buf })
+    a.nvim_set_option_value('buftype', 'nowrite', { buf = provider.buf })
+    a.nvim_set_option_value('filetype', 'markdown', { buf = provider.buf })
+    a.nvim_set_option_value('syntax', 'markdown', { buf = provider.buf })
 
     local key_opts_from_desc = function(description)
-        return { buffer = buf, nowait = true, desc = description, silent = true }
+        return { buffer = provider.buf, nowait = true, desc = description, silent = true }
     end
     vim.keymap.set("n", "<localleader>q", ":close<CR>", key_opts_from_desc("Close Issue"))
 
     local log = require("gitforge.log")
     vim.keymap.set("n", "<localleader>c", function()
             vim.schedule(function()
-                local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
+                local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(provider.buf)
                 if issue_number == nil then
-                    log.notify_failure("Failed to determine issue id to comment on in buffer " .. buf)
+                    log.notify_failure("Failed to determine issue id to comment on in buffer " .. provider.buf)
                     return
                 end
-                M.comment_on_issue(issue_number)
+                M.comment_on_issue(provider)
             end)
         end,
         key_opts_from_desc("Comment on Issue"))
 
     vim.keymap.set("n", "<localleader>u", function()
-            M.update_issue_buffer(buf)
+            require("gitforge.generic_ui").refresh_issue(provider)
             log.notify_change("Updated the issue buffer")
         end,
         key_opts_from_desc("Update Issue"))
@@ -86,20 +88,17 @@ local set_issue_buffer_options = function(buf)
     vim.keymap.set("n", "<localleader>t", function()
             vim.schedule(function()
                 log.trace_msg("Change Title")
-                local curr_buf_content = a.nvim_buf_get_lines(buf, 0, 1, false)
+                local curr_buf_content = a.nvim_buf_get_lines(provider.buf, 0, 1, false)
                 local headline_markdown = curr_buf_content[1]
                 -- strip markdown header 1
-                local headline = headline_markdown:sub(3, -1)
+                local headline = vim.trim(headline_markdown:sub(3, -1))
                 vim.ui.input({ prompt = "Enter New Title: ", default = headline },
                     function(input)
                         if input == nil then
                             log.ephemeral_info("Aborted input")
                             return
                         end
-                        if #input == 0 then
-                            log.notify_failure("Empty new Title is not allowed")
-                        end
-                        M.change_title(buf, input)
+                        M.change_title(input, provider)
                     end)
             end)
         end,
@@ -107,7 +106,7 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>l", function()
             vim.schedule(function()
-                local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(buf)
+                local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(provider.buf)
                 if previous_labels == nil then
                     return
                 end
@@ -117,7 +116,7 @@ local set_issue_buffer_options = function(buf)
                             log.ephemeral_info("Aborted Issue Label Change")
                             return
                         end
-                        M.change_labels(buf, previous_labels, Set:createFromCSVList(input))
+                        M.change_labels(previous_labels, Set:createFromCSVList(input), provider)
                     end)
             end)
         end,
@@ -125,7 +124,7 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>a", function()
             vim.schedule(function()
-                local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(buf)
+                local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(provider.buf)
                 if previous_assignees == nil then
                     return
                 end
@@ -135,19 +134,19 @@ local set_issue_buffer_options = function(buf)
                             log.ephemeral_info("Aborted Issue Assigning")
                             return
                         end
-                        M.change_assignees(buf, previous_assignees, Set:createFromCSVList(input))
+                        M.change_assignees(previous_assignees, Set:createFromCSVList(input), provider)
                     end)
             end)
         end,
         key_opts_from_desc("Assign Issue"))
 
     vim.keymap.set("n", "<localleader>e", function()
-            M.change_issue_description(buf, M.opts)
+            M.change_issue_description(M.opts, provider)
         end,
         key_opts_from_desc("Edit Issue Body"))
 
     vim.keymap.set("n", "<localleader>s", function()
-            M.change_issue_state(buf, M.opts)
+            M.change_issue_state(M.opts, provider)
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
 end
@@ -186,9 +185,11 @@ function M.get_labels()
 end
 
 -- Creates a new issue by prompting for the title. The description is written in a new buffer.
+---@param opts table
+---@param provider GHIssue
 -- TODO: Provide a way to select labels directly on creation.
 --       Right now it needs to be done by editing the new issue.
-function M.create_issue(opts)
+function M.create_issue(opts, provider)
     local log = require("gitforge.log")
     local title
     local description_file
@@ -235,7 +236,8 @@ function M.create_issue(opts)
                 log.trace_msg(id)
                 return
             end
-            M.view_issue(int_id, opts)
+            local p = provider:newIssue(tostring(int_id))
+            M.view_issue(opts, p)
         end)
     end
     local create_issue_call = function()
@@ -288,9 +290,9 @@ function M.create_issue(opts)
     vim.ui.input({ prompt = "Issue Title (esc or empty to abort): " }, continuation_after_title_prompt)
 end
 
-function M.comment_on_issue(issue_number)
+---@param provider GHIssue
+function M.comment_on_issue(provider)
     local log = require("gitforge.log")
-    local generic_ui = require("gitforge.generic_ui")
 
     local comment_file = os.tmpname()
     log.trace_msg("Tempfile for comment: " .. comment_file)
@@ -322,10 +324,8 @@ function M.comment_on_issue(issue_number)
             cleanup()
             return
         end
-        local gh_call = { "gh", "issue", "comment", issue_number, "--body-file", comment_file }
-        log.executed_command(gh_call)
-        vim.fn.system(gh_call)
-        log.notify_change("Commented on issue " .. issue_number)
+        require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+            function(p) return p:cmd_comment(comment_file) end)
         cleanup()
     end
     local autocmdid
@@ -335,9 +335,6 @@ function M.comment_on_issue(issue_number)
             if win_split ~= 0 then
                 perform_comment()
                 win_split = 0
-
-                local buf = generic_ui.find_existing_issue_buffer(issue_number)
-                M.update_issue_buffer(buf)
             end
             a.nvim_del_autocmd(autocmdid)
         end
@@ -348,29 +345,32 @@ end
 ---with the previous description and allows editing it. After save-closing the window, the
 ---description is updated on the issue.
 ---@param opts table Project options
-function M.change_issue_description(buf, opts)
+---@param provider GHIssue
+function M.change_issue_description(opts, provider)
     -- FIXME: The last instance of '## Comments' must be found, because the issue content
     --        could have this line itself! The problem is, that comments themself might have
     --        this line contained. So the last instance is wrong. Somewhere in between "smart".
     --        The solution is likely just using a weird '## Comments' headline in rendering ...
     local log = require("gitforge.log")
     local util = require("gitforge.utility")
+    local generic_ui = require("gitforge.generic_ui")
+
     log.trace_msg("Edit Issue Description")
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
+    local issue_number = provider.issue_number
     if issue_number == nil then
-        log.notify_failure("Failed to retrieve issue number for issue in buffer " .. buf)
+        log.notify_failure("Failed to retrieve issue number")
         return
     end
-    local full_issue_str = util.buffer_to_string(buf)
+    local full_issue_str = util.buffer_to_string(provider.buf)
     local idx_start_of_desc_headline = string.find(full_issue_str, g_description_headline_md, 1, true)
     if idx_start_of_desc_headline == nil then
-        log.notify_failure("Failed to find headline for description in issue buffer " .. buf)
+        log.notify_failure("Failed to find headline for description in issue buffer " .. provider.buf)
         return
     end
 
     local idx_newline_after_description_headline = string.find(full_issue_str, "\n", idx_start_of_desc_headline)
     if idx_newline_after_description_headline == nil then
-        log.notify_failure("Expected a newline character after headline string in issue buffer " .. buf)
+        log.notify_failure("Expected a newline character after headline string in issue buffer " .. provider.buf)
         return
     else
         -- Remove the two '\n' inserted after the headline.
@@ -387,7 +387,7 @@ function M.change_issue_description(buf, opts)
     if idx_start_of_comments - idx_newline_after_description_headline < 2 then
         log.notify_failure(
             "Expected a greater distance between start of description and start of comments. Bug?! in issue buffer " ..
-            buf)
+            provider.buf)
         return
     end
     local parsed_description = string.sub(full_issue_str, idx_newline_after_description_headline, idx_start_of_comments)
@@ -409,7 +409,7 @@ function M.change_issue_description(buf, opts)
     else
         parsed_description = ""
     end
-    local win_split = require("gitforge.generic_ui").open_edit_window(descr_edit_buf)
+    local win_split = generic_ui.open_edit_window(descr_edit_buf)
     if win_split == 0 then
         log.notify_failure("Failed to create window to edit the description")
         cleanup()
@@ -425,10 +425,8 @@ function M.change_issue_description(buf, opts)
         if new_desc == parsed_description then
             log.ephemeral_info("No update to the description occured.")
         else
-            local gh_call = { "gh", "issue", "edit", issue_number, "--body-file", tmp_desc_file }
-            log.executed_command(gh_call)
-            vim.fn.system(gh_call)
-            log.notify_change("Updated the description of issue " .. issue_number)
+            generic_ui.perform_issue_update_cmd(provider,
+                function(p) return p:cmd_description_change(tmp_desc_file) end)
         end
         cleanup()
     end
@@ -439,62 +437,13 @@ function M.change_issue_description(buf, opts)
             if win_split ~= 0 then
                 edit_description()
                 win_split = 0
-                M.update_issue_buffer(buf)
             end
             a.nvim_del_autocmd(autocmdid)
         end,
     })
 end
 
-function M.change_issue_state(buf, opts)
-    local log = require("gitforge.log")
-    local generic_issue = require("gitforge.generic_issue")
-
-    log.trace_msg("Edit State - Open/Close")
-    local issue_number = generic_issue.get_issue_id_from_buf(buf)
-    local issue_status = generic_issue.get_status_from_issue_buffer(buf)
-
-    local compute_possible_next_states = function(current_state)
-        if current_state == "OPEN" then
-            return { "CLOSED completed", "CLOSED not planned", current_state }
-        else
-            return { "REOPEN", current_state }
-        end
-    end
-    local list_of_next_stati = compute_possible_next_states(issue_status)
-    vim.ui.select(list_of_next_stati, { prompt = "Select new issue state:", },
-        function(choice)
-            if issue_status == choice then
-                log.ephemeral_info("Issue state did not change")
-                return
-            end
-            log.trace_msg("From " .. issue_status .. " to " .. choice)
-            local gh_call = { "gh", "issue", }
-            if choice == "CLOSED completed" then
-                table.insert(gh_call, "close")
-                table.insert(gh_call, issue_number)
-                table.insert(gh_call, "--reason")
-                table.insert(gh_call, "completed")
-            elseif choice == "CLOSED not planned" then
-                table.insert(gh_call, "close")
-                table.insert(gh_call, issue_number)
-                table.insert(gh_call, "--reason")
-                table.insert(gh_call, "not planned")
-            elseif choice == "REOPEN" then
-                table.insert(gh_call, "reopen")
-                table.insert(gh_call, issue_number)
-            else
-                log.notify_failure("Unexpected next state occured. BUG detected. Performing no update!")
-                return
-            end
-            log.executed_command(gh_call)
-            vim.fn.system(gh_call)
-            log.notify_change("Changed the state for issue " .. issue_number)
-            M.update_issue_buffer(buf)
-        end)
-end
-
-function M.cached_issues_picker()
+function M.cached_issues_picker(provider)
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
     local config = require("telescope.config").values
@@ -563,9 +512,11 @@ function M.cached_issues_picker()
                         ts.utils.warn_no_selection "Missing Issue Selection"
                         return
                     end
-                    M.view_issue(selection.value.issue_number, {
-                        project = opts.project,
-                    })
+                    print("TS2")
+                    print(vim.inspect(selection.value))
+                    local p = provider:newIssue(selection.value.issue_number)
+                    print(vim.inspect(p))
+                    M.view_issue({ project = opts.project, }, p)
                 end)
                 return true
             end,
@@ -573,7 +524,9 @@ function M.cached_issues_picker()
         :find()
 end
 
-local create_telescope_picker_for_issue_list = function(issue_list_json)
+---@param issue_list_json table
+---@param provider GHIssue
+local create_telescope_picker_for_issue_list = function(issue_list_json, provider)
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
     local entry_display = require("telescope.pickers.entry_display")
@@ -653,7 +606,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                     buf = generic_issue.render_issue_to_buffer(buf, entry.value)
                     local title_ui = generic_ui.issue_title_ui(entry.value)
                     a.nvim_buf_set_name(buf, title_ui)
-                    set_issue_buffer_options(buf)
+                    M.set_issue_buffer_options(provider:new(buf))
                 else
                     -- Display the previously rendered content for the issue. Comments will be
                     -- present in this case.
@@ -672,24 +625,25 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                     ts.utils.warn_no_selection "Missing Issue Selection"
                     return
                 end
-                M.view_issue(selection.value.number, {
-                    project = opts.project,
-                })
+                local p = provider:newIssue(selection.value.number)
+                M.view_issue({ project = opts.project, }, p)
             end)
             return true
         end,
     }):find()
 end
 
-function M.list_issues(opts)
+---@param opts table
+---@param provider GHIssue
+function M.list_issues(opts, provider)
     local log = require("gitforge.log")
     local open_telescope_list = function(handle)
         if handle.code ~= 0 then
-            log.notify_failure("Failed to retrieve issue list")
+            log.ephemeral_info("Failed to retrieve issue list")
             return
         end
         local data = vim.json.decode(handle.stdout)
-        vim.schedule(function() create_telescope_picker_for_issue_list(data) end)
+        vim.schedule(function() create_telescope_picker_for_issue_list(data, provider) end)
     end
     local required_fields =
     "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
@@ -715,220 +669,91 @@ function M.list_issues(opts)
     call_handle:wait()
 end
 
-function M.fetch_issue_call(issue_number, opts)
-    local required_fields =
-    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local gh_call = { "gh", "issue", "view", issue_number, "--json", required_fields }
-    if opts.project then
-        table.insert(gh_call, "-R")
-        table.insert(gh_call, opts.project)
-    end
-    return gh_call
-end
-
-function M.update_issue_buffer(buf)
+---@param opts table
+---@param provider GHIssue
+function M.view_issue(opts, provider)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
-    local opts = {}
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
-    local gh_call = M.fetch_issue_call(issue_number, opts)
 
-    log.executed_command(gh_call)
-    vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-        function(handle)
-            if handle.code ~= 0 then
-                log.notify_failure("Failed to retrieve issue content")
-                return
-            end
-            vim.schedule(function()
-                local issue_json = vim.fn.json_decode(handle.stdout)
-                log.trace_msg("update single issue in buf: " .. tostring(buf))
-                buf = require("gitforge.generic_issue").render_issue_to_buffer(buf, issue_json)
-
-                local title_ui = generic_ui.issue_title_ui(issue_json)
-                a.nvim_buf_set_name(buf, title_ui)
-                set_issue_buffer_options(buf)
-                log.ephemeral_info("Updated content for issue " .. issue_number)
-            end)
-        end)
-end
-
-function M.view_issue(issue_number, opts)
-    local log = require("gitforge.log")
-    local generic_ui = require("gitforge.generic_ui")
-    local generic_issue = require("gitforge.generic_issue")
-
-    local buf = generic_ui.find_existing_issue_buffer(issue_number)
-
-    local open_buffer_with_issue = function(handle)
-        if handle.code ~= 0 then
-            log.notify_failure("Failed to retrieve issue content")
-            return
-        end
-        vim.schedule(function()
-            local data = vim.fn.json_decode(handle.stdout)
-
-            log.trace_msg("view single issue in buf: " .. tostring(buf))
-            buf = generic_issue.render_issue_to_buffer(buf, data)
-
-            local title_ui = generic_ui.issue_title_ui(data)
-            a.nvim_buf_set_name(buf, title_ui)
-            set_issue_buffer_options(buf)
-
-            generic_ui.create_issue_window(buf, title_ui)
-        end)
-    end
-
-    local gh_call = M.fetch_issue_call(issue_number, opts)
-
-    if buf == 0 then
-        log.trace_msg("Issue not available as buffer - creating it new")
-        log.executed_command(gh_call)
-        local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, open_buffer_with_issue)
-        call_handle:wait()
+    provider.buf = generic_ui.find_existing_issue_buffer(provider.issue_number)
+    if provider.buf == 0 then
+        generic_ui.refresh_issue(provider, function(p, issue)
+            local title_ui = generic_ui.issue_title_ui(issue)
+            generic_ui.create_issue_window(p.buf, title_ui)
+        end):wait()
     else
         log.trace_msg("Found issue in buffer - displaying old state and triggering update")
-        local title_ui = a.nvim_buf_get_name(buf)
-        generic_ui.create_issue_window(buf, title_ui)
-
-        -- Trigger an update after already opening the issue in a window.
-        log.executed_command(gh_call)
-        vim.system(gh_call, { text = true, timeout = M.opts.timeout },
-            function(handle)
-                if handle.code ~= 0 then
-                    log.notify_failure("Failed to retrieve issue content")
-                    return
-                end
-                vim.schedule(function() M.update_issue_buffer(buf) end)
-            end)
+        local title_ui = a.nvim_buf_get_name(provider.buf)
+        generic_ui.create_issue_window(provider.buf, title_ui)
+        generic_ui.refresh_issue(provider)
     end
 end
 
-function M.change_title(buf, title_input)
-    local log = require("gitforge.log")
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
-    local handle_title_update = function(handle)
-        vim.schedule(function()
-            if handle.code ~= 0 then
-                log.notify_failure("Failed to update title")
-                return
-            end
-            log.notify_change("Updated the title for issue " .. issue_number)
-            M.update_issue_buffer(buf)
-        end)
+---@param title_input string
+---@param provider GHIssue
+function M.change_title(title_input, provider)
+    if #title_input == 0 then
+        require("gitforge.log").notify_failure("An empty title is not allowed")
     end
-    local gh_call = { "gh", "issue", "edit", issue_number, "--title", title_input }
-    log.executed_command(gh_call)
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_title_update)
-    call_handle:wait()
-end
-
----@param new_labels Set
----@param removed_labels Set
-local create_label_update_command = function(new_labels, removed_labels, buf)
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
-    local gh_call = { "gh", "issue", "edit", issue_number }
-
-    if not removed_labels:empty() then
-        table.insert(gh_call, "--remove-label")
-        table.insert(gh_call, removed_labels:toCSV())
-    end
-
-    if not new_labels:empty() then
-        table.insert(gh_call, "--add-label")
-        table.insert(gh_call, new_labels:toCSV())
-    end
-    return gh_call
-end
-
----@param new_assignees Set
----@param removed_assignees Set
-local create_assignee_update_command = function(new_assignees, removed_assignees, buf)
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
-    local gh_call = { "gh", "issue", "edit", issue_number }
-
-    if not removed_assignees:empty() then
-        table.insert(gh_call, "--remove-assignee")
-        table.insert(gh_call, removed_assignees:toCSV())
-    end
-
-    if not new_assignees:empty() then
-        table.insert(gh_call, "--add-assignee")
-        table.insert(gh_call, new_assignees:toCSV())
-    end
-    return gh_call
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+        function(p) return p:cmd_title_change(title_input) end)
 end
 
 ---Changes the labels of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
----@param buf number Buffer-ID of the issue
 ---@param previous Set previous labels
 ---@param new Set new labels
-function M.change_labels(buf, previous, new)
-    local log = require("gitforge.log")
-
+---@param provider GHIssue
+function M.change_labels(previous, new, provider)
     local added, removed = previous:deltaTo(new)
-    if removed:empty() and added:empty() then
-        log.ephemeral_info("Labels did not change.")
+    if added:empty() and removed:empty() then
+        require("gitforge.log").ephemeral_info("Labels did not change.")
         return
     end
-    local gh_call = create_label_update_command(added, removed, buf)
-    if gh_call == nil then
-        log.notify_failure("Failed to generate command to update labels.")
-        return
-    end
-    local handle_label_update = function(handle)
-        vim.schedule(function()
-            if handle.code ~= 0 then
-                a.nvim_err_write(handle.stderr)
-                a.nvim_err_write(handle.stdout)
-                log.notify_failure("Failed to update labels")
-                return
-            end
-            log.notify_change("Updated Labels")
-            M.update_issue_buffer(buf)
-        end)
-    end
-    log.executed_command(gh_call)
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_label_update)
-    call_handle:wait()
+
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+        function(p) return p:cmd_label_change(added, removed) end)
 end
 
 ---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
----@param buf number Buffer-ID of the issue
 ---@param previous Set previous assignees
 ---@param new Set new assignees
-function M.change_assignees(buf, previous, new)
+---@param provider GHIssue
+function M.change_assignees(previous, new, provider)
+    local added, removed = previous:deltaTo(new)
+    if added:empty() and removed:empty() then
+        require("gitforge.log").ephemeral_info("Assignees did not change.")
+        return
+    end
+
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+        function(p) return p:cmd_assignee_change(added, removed) end)
+end
+
+---@param provider GHIssue
+function M.change_issue_state(opts, provider)
     local log = require("gitforge.log")
 
-    local added, removed = previous:deltaTo(new)
-    if removed:empty() and added:empty() then
-        log.ephemeral_info("Assignees did not change.")
-        return
-    end
+    log.trace_msg("Edit State - Open/Close")
+    local issue_status = require("gitforge.generic_issue").get_status_from_issue_buffer(provider.buf)
 
-    local gh_call = create_assignee_update_command(added, removed, buf)
-    if gh_call == nil then
-        log.notify_failure("Failed to create command to update assignees")
+    local list_of_next_stati = provider:next_possible_states(issue_status)
+    if list_of_next_stati == nil then
+        log.notify_failure("Failed to determine possible next issue states")
         return
     end
-    local handle_assignee_update = function(handle)
-        vim.schedule(function()
-            if handle.code ~= 0 then
-                --TODO: Better error logging
-                a.nvim_err_write(handle.stderr)
-                a.nvim_err_write(handle.stdout)
-                log.notify_failure("Failed to update assignees")
+    vim.ui.select(list_of_next_stati, { prompt = "Select new issue state:", },
+        function(choice)
+            if issue_status == choice then
+                log.ephemeral_info("Issue state did not change")
                 return
             end
-            log.notify_change("Updated Assignees")
-            M.update_issue_buffer(buf)
+            log.trace_msg("From " .. issue_status .. " to " .. choice)
+
+            require("gitforge.generic_ui").perform_issue_update_cmd(provider,
+                function(p) return p:cmd_state_change(choice) end)
         end)
-    end
-    log.executed_command(gh_call)
-    local call_handle = vim.system(gh_call, { text = true, timeout = M.opts.timeout }, handle_assignee_update)
-    call_handle:wait()
 end
 
 return M
