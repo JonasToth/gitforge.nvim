@@ -12,8 +12,8 @@ Read more about the goals and development milestones under [development resource
 
 ## Installation
 
-**lazy.nvim**
-<detail>
+**[lazy.nvim](https://github.com/folke/lazy.nvim)**
+<details>
 ```lua
 local ia = "gitforge.issue_actions"
 return {
@@ -42,7 +42,7 @@ return {
     opts = {},
 }
 ```
-</detail>
+</details>
 
 Please call any of the following commands  to see if any issues are detected by the plugin:
 - `:checkhealth gitforge` to check the overall plugin health

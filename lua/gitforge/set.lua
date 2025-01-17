@@ -1,7 +1,7 @@
 ---@class Set
 ---@field elements table<string, boolean>
 ---@brief Keeps the strings as keys of a table. If the key has a value, its element is in the set.
-Set = {}
+local Set = {}
 
 function Set:new()
     local s = setmetatable({}, { __index = Set })

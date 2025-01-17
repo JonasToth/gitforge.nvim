@@ -54,7 +54,7 @@ be the same across different git forges. The module/feature set per git forge/ba
     - closing/reopening issues (or state transitions in general)
 - [ ] searching for issue by changing labels, assignees and so on interactively
 - [x] a bit of convenience, e.g. providing a way to custom query only issues with specific labels (bugs)
-- [ ]project, defined through path matching, specific options
+- [ ] project, defined through path matching, specific options
 - [ ] get both Github and GitLab working
 
 ### PRs

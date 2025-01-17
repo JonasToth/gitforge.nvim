@@ -350,7 +350,8 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     end
                 end
                 local labels_str = vim.fn.join(issue_labels, ",")
-                local search_ordinal = entry.title .. ":" .. tostring(entry.number) .. ":" .. labels_str
+                local assignee_str = vim.fn.join(assignees, ",")
+                local search_ordinal = entry.title .. ":" .. tostring(entry.number) .. ":" .. labels_str .. ":" .. assignee_str
                 return make_entry.set_default_entry_mt({
                     ordinal = search_ordinal,
                     title = entry.title,
