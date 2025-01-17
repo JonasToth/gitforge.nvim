@@ -111,13 +111,13 @@ local set_issue_buffer_options = function(buf)
                 if previous_labels == nil then
                     return
                 end
-                vim.ui.input({ prompt = "Enter New Labels: ", default = previous_labels },
+                vim.ui.input({ prompt = "Enter New Labels: ", default = previous_labels:toCSV() },
                     function(input)
                         if input == nil then
                             log.ephemeral_info("Aborted Issue Label Change")
                             return
                         end
-                        M.change_labels(buf, previous_labels, input)
+                        M.change_labels(buf, previous_labels, Set:createFromCSVList(input))
                     end)
             end)
         end,
@@ -125,17 +125,17 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>a", function()
             vim.schedule(function()
-                local previous_assignee = M.get_assignee_from_issue_buffer(buf)
-                if previous_assignee == nil then
+                local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(buf)
+                if previous_assignees == nil then
                     return
                 end
-                vim.ui.input({ prompt = "Enter New Assignee(s): ", default = previous_assignee },
+                vim.ui.input({ prompt = "Enter New Assignee(s): ", default = previous_assignees:toCSV() },
                     function(input)
                         if input == nil then
                             log.ephemeral_info("Aborted Issue Assigning")
                             return
                         end
-                        M.change_assignees(buf, previous_assignee, input)
+                        M.change_assignees(buf, previous_assignees, Set:createFromCSVList(input))
                     end)
             end)
         end,
@@ -150,51 +150,6 @@ local set_issue_buffer_options = function(buf)
             M.change_issue_state(buf, M.opts)
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
-end
-
----Return the string of the current state of the issue buffer @c buf if possible.
----@param buf number Buffer-Id for the issue
----@return string|nil status String representation of the issue status if found,  otherwise @c nil.
-function M.get_status_from_issue_buffer(buf)
-    local log = require("gitforge.log")
-    local curr_buf_content = a.nvim_buf_get_lines(buf, 4, 5, false)
-    local status_line = curr_buf_content[1]
-    if status_line == nil then
-        log.notify_failure("Failed to get status line from buffer " .. buf)
-        return nil;
-    end
-    local extracted_status = string.match(status_line, "^Status: (.+) %(")
-    if extracted_status == nil then
-        log.notify_failure("Failed to extract status from buffer " .. buf .. " and supposed state line:\n" .. status_line)
-        return nil
-    end
-    return vim.trim(extracted_status)
-end
-
----Return the comma separated list of assignees from the issue buffer @c buf if possible.
----@param buf number Buffer-ID for Issue.
----@return string|nil Returns a comma separated list of assignees on success, otherwise @c nil.
-function M.get_assignee_from_issue_buffer(buf)
-    local log = require("gitforge.log")
-    local curr_buf_content = a.nvim_buf_get_lines(buf, 5, 6, false)
-    local assignee_line = curr_buf_content[1]
-    if assignee_line == nil then
-        log.notify_failure("Failed to get assignee line from buffer " .. buf)
-        return nil;
-    end
-    -- verify that the labels line is found
-    if assignee_line:sub(1, 12) ~= "Assigned to:" then
-        log.notify_failure("Found assignee line does not contain 'Assigned to:' at beginning of line, ERROR (line: " ..
-            assignee_line .. ")")
-        return nil
-    end
-    -- extract all labels from the line
-    local assignees = assignee_line:sub(14, -1)
-    if assignees == "-" then
-        return ""
-    else
-        return assignees
-    end
 end
 
 -- Returns the issue labels of the current project.
@@ -493,9 +448,11 @@ end
 
 function M.change_issue_state(buf, opts)
     local log = require("gitforge.log")
+    local generic_issue = require("gitforge.generic_issue")
+
     log.trace_msg("Edit State - Open/Close")
-    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
-    local issue_status = M.get_status_from_issue_buffer(buf)
+    local issue_number = generic_issue.get_issue_id_from_buf(buf)
+    local issue_status = generic_issue.get_status_from_issue_buffer(buf)
 
     local compute_possible_next_states = function(current_state)
         if current_state == "OPEN" then
@@ -866,14 +823,6 @@ function M.change_title(buf, title_input)
     call_handle:wait()
 end
 
----Compute the removed and added elements of a CSV list.
----@param new_input_csv string CSV string of elements
----@param previous_input_csv string CSV string of elements
----@return Set added elements that were added in @c new_input_csv
----@return Set removed elements that were remove in @c new_input_csv
-local compute_add_and_remove_sets = function(new_input_csv, previous_input_csv)
-end
-
 ---@param new_labels Set
 ---@param removed_labels Set
 local create_label_update_command = function(new_labels, removed_labels, buf)
@@ -913,13 +862,12 @@ end
 ---Changes the labels of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
 ---@param buf number Buffer-ID of the issue
----@param previous string comma separated list of the previous labels, used for set difference
----@param new string comma separated list of new labels, used for set difference
+---@param previous Set previous labels
+---@param new Set new labels
 function M.change_labels(buf, previous, new)
-    require("gitforge.set")
     local log = require("gitforge.log")
 
-    local added, removed = Set:createFromCSVList(previous):deltaTo(Set:createFromCSVList(new))
+    local added, removed = previous:deltaTo(new)
     if removed:empty() and added:empty() then
         log.ephemeral_info("Labels did not change.")
         return
@@ -949,13 +897,12 @@ end
 ---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
 ---@param buf number Buffer-ID of the issue
----@param previous string comma separated list of the previous assignees, used for set difference
----@param new string comma separated list of new assignees, used for set difference
+---@param previous Set previous assignees
+---@param new Set new assignees
 function M.change_assignees(buf, previous, new)
-    require("gitforge.set")
     local log = require("gitforge.log")
 
-    local added, removed = Set:createFromCSVList(previous):deltaTo(Set:createFromCSVList(new))
+    local added, removed = previous:deltaTo(new)
     if removed:empty() and added:empty() then
         log.ephemeral_info("Assignees did not change.")
         return
