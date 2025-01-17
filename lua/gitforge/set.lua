@@ -59,6 +59,13 @@ function Set:difference(other)
     return result_set
 end
 
+---Computes what elements were added and removed in @c other compared to @c self.
+---@param other Set set to compute the delta to.
+---@return Set added all elements that have to be added to @c self to become @c other
+---@return Set remove all elements that have to be removed from @c self to become @c other
+function Set:deltaTo(other)
+end
+
 ---@return string CSV Joins each element in the set with a ',' together to form on string.
 function Set:toCSV()
     local label_table = {}
