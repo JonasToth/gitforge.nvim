@@ -45,7 +45,7 @@ function M.setup(opts)
     M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
 
     vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
-    vim.api.nvim_create_user_command("GForgeCachedIssues", M.list_cached_issues, {})
+    vim.api.nvim_create_user_command("GForgeOpenedIssues", M.list_opened_issues, {})
     vim.api.nvim_create_user_command("GForgeCreateIssue", M.create_issue, {})
 end
 
@@ -54,9 +54,9 @@ function M.list_issues(args)
     require("gitforge.issue_actions").list_issues({}, provider)
 end
 
-function M.list_cached_issues(args)
+function M.list_opened_issues(args)
     local provider = require(M.opts.default_issue_provider)
-    require("gitforge.issue_actions").list_cached_issues(provider)
+    require("gitforge.issue_actions").list_opened_issues(provider)
 end
 
 function M.create_issue(args)

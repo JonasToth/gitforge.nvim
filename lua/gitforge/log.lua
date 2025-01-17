@@ -16,22 +16,21 @@ end
 ---Useful to signal noops or signal ineffective actions.
 ---@param info_msg string Message that is displayed to the user shortly.
 function Log.ephemeral_info(info_msg)
-    vim.api.nvim_echo({ { info_msg } }, false, {})
+    vim.schedule(function() vim.api.nvim_echo({ { info_msg } }, false, {}) end)
 end
 
 ---Debug logging to trace the execution of the code. Off by default.
 ---@param msg string Debug trace message.
 function Log.trace_msg(msg)
-    -- vim.api.nvim_echo({ { msg } }, false, {})
+    -- vim.schedule(function() vim.api.nvim_echo({ { msg } }, false, {}) end)
 end
 
 ---@param command_table table<string> Command line call in string pieces to log
 function Log.executed_command(command_table)
     if command_table == nil then
-        vim.api.nvim_err_writeln("Tries to log nil as command")
+        vim.schedule(function() vim.api.nvim_err_writeln("Tries to log nil as command") end)
     else
-        --TODO: Replace this with `a.nvim_echo`.
-        print(vim.inspect(command_table))
+        vim.schedule(function() vim.inspect(command_table) end)
     end
 end
 

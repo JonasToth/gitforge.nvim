@@ -71,11 +71,13 @@ function GenericUI.find_existing_issue_buffer(issue_number)
     return 0
 end
 
----@param provider GHIssue
+---@param provider GHIssue|nil
 ---@param completion function|nil
 function GenericUI.refresh_issue(provider, completion)
     local log = require("gitforge.log")
-    local command = provider:cmd_fetch()
+    local prov = provider or require(require("gitforge").opts.default_issue_provider)
+
+    local command = prov:cmd_fetch()
 
     return require("gitforge.utility").async_exec(command,
         function(handle)
@@ -87,29 +89,30 @@ function GenericUI.refresh_issue(provider, completion)
             vim.schedule(function()
                 local generic_issue = require("gitforge.generic_issue")
 
-                local issue = provider:convert_cmd_result_to_issue(handle.stdout)
-                log.trace_msg("update single issue in buf: " .. tostring(provider.buf))
-                provider.buf = generic_issue.render_issue_to_buffer(provider.buf, issue)
+                local issue = prov:convert_cmd_result_to_issue(handle.stdout)
+                log.trace_msg("update single issue in buf: " .. tostring(prov.buf))
+                provider.buf = generic_issue.render_issue_to_buffer(prov.buf, issue)
 
                 local title_ui = require("gitforge.generic_ui").issue_title_ui(issue)
-                vim.api.nvim_buf_set_name(provider.buf, title_ui)
-                generic_issue.set_issue_buffer_options(provider)
-                log.ephemeral_info("Updated content for issue " .. provider.issue_number)
+                vim.api.nvim_buf_set_name(prov.buf, title_ui)
+                generic_issue.set_issue_buffer_options(prov)
+                log.ephemeral_info("Updated content for issue " .. prov.issue_number)
 
                 if completion ~= nil then
-                    completion(provider)
+                    completion(prov)
                 end
             end)
         end)
 end
 
 ---Blocking call to update the issue on the git forge and update the local content.
----@param provider GHIssue Implementation for command generation.
+---@param provider GHIssue|nil Implementation for command generation.
 ---@param command_generator function Generate the command to execute.
 function GenericUI.perform_issue_update_cmd(provider, command_generator)
     local log = require("gitforge.log")
+    local prov = provider or require(require("gitforge").opts.default_issue_provider)
 
-    local command = command_generator(provider)
+    local command = command_generator(prov)
     if command == nil then
         log.notify_failure("Failed to create command to update issue!")
         return
@@ -124,7 +127,7 @@ function GenericUI.perform_issue_update_cmd(provider, command_generator)
                 return
             end
             log.notify_change("Updated Issue")
-            GenericUI.refresh_issue(provider)
+            GenericUI.refresh_issue(prov)
         end)
     end
     require("gitforge.utility").async_exec(command, handle_cmd_completion):wait()
