@@ -50,18 +50,6 @@ function M.handle_command(opts)
     end
 end
 
---- Parses the buffer name and tries to retrieve the issue number and project.
----@param buf number Buffer Id for the issue buffer
-local get_issue_id_from_buf = function(buf)
-    local buf_name = a.nvim_buf_get_name(buf)
-    if string.find(buf_name, "[Issue]", 1, true) == nil then
-        return nil
-    end
-    for nbr in buf_name:gmatch("#(%d+)") do
-        return nbr
-    end
-end
-
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
 ---@param buf number Buffer ID to work on.
@@ -79,7 +67,7 @@ local set_issue_buffer_options = function(buf)
     local log = require("gitforge.log")
     vim.keymap.set("n", "<localleader>c", function()
             vim.schedule(function()
-                local issue_number = get_issue_id_from_buf(buf)
+                local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
                 if issue_number == nil then
                     log.notify_failure("Failed to determine issue id to comment on in buffer " .. buf)
                     return
@@ -119,7 +107,7 @@ local set_issue_buffer_options = function(buf)
 
     vim.keymap.set("n", "<localleader>l", function()
             vim.schedule(function()
-                local previous_labels = M.get_labels_from_issue_buffer(buf)
+                local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(buf)
                 if previous_labels == nil then
                     return
                 end
@@ -162,111 +150,6 @@ local set_issue_buffer_options = function(buf)
             M.change_issue_state(buf, M.opts)
         end,
         key_opts_from_desc("Edit State - Reopen/Close"))
-end
-
---- Renders the issue content into a buffer as markdown.
---- @param buf number Buffer-Id to work on. If `nil`, a new buffer is created.
---- @param issue_json table Table of JSON data.
---- @return number number of the buffer. Can be `0` if creation failed.
-function M.render_issue_to_buffer(buf, issue_json)
-    local log = require("gitforge.log")
-    log.trace_msg("Rendering Issue to buffer " .. buf)
-    if issue_json == nil then
-        return buf
-    end
-
-    if buf == 0 then
-        buf = a.nvim_create_buf(true, false)
-    end
-    if buf == 0 then
-        log.notify_failure("Failed to create buffer to view issues")
-        return 0
-    end
-
-    local desc = string.gsub(issue_json.body, "\r", "")
-    a.nvim_set_option_value('modifiable', true, { buf = buf })
-    a.nvim_set_option_value('readonly', false, { buf = buf })
-    a.nvim_set_option_value('buftype', 'nofile', { buf = buf })
-    a.nvim_set_option_value('swapfile', false, { buf = buf })
-
-    a.nvim_buf_set_lines(buf, 0, -1, true, { '# ' .. issue_json.title, '' })
-    local realName = ''
-    if issue_json.author and issue_json.author.name then
-        realName = '(' .. issue_json.author.name .. ') '
-    end
-    a.nvim_buf_set_lines(buf, -1, -1, true, { 'Number: #' .. issue_json.number })
-    a.nvim_buf_set_lines(buf, -1, -1, true,
-        { 'Created by `@' .. issue_json.author.login .. '` ' .. realName .. 'at ' .. issue_json.createdAt })
-    if not issue_json.closed then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.createdAt .. ')' })
-    else
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Status: ' .. issue_json.state .. ' (' .. issue_json.closedAt .. ')' })
-    end
-    local assignees = {}
-    for _, value in ipairs(issue_json.assignees) do
-        table.insert(assignees, value.login)
-    end
-    if #assignees > 0 then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Assigned to: ' .. vim.fn.join(assignees, ',') })
-    else
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Assigned to: -' })
-    end
-    local labels = {}
-    for _, value in ipairs(issue_json.labels) do
-        table.insert(labels, value.name)
-    end
-    if #labels > 0 then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'Labels: ' .. vim.fn.join(labels, ',') })
-    end
-    -- if issue_json.milestone ~= vim.NIL then
-    --     a.nvim_buf_set_lines(buf, -1, -1, true, { 'Milestone: ' .. issue_json.milestone })
-    -- end
-
-    a.nvim_buf_set_lines(buf, -1, -1, true, { '', g_description_headline_md, '' })
-    if #desc == 0 then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { 'No Description' })
-    else
-        a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(desc), '\n'))
-    end
-    if issue_json.comments ~= nil then
-        a.nvim_buf_set_lines(buf, -1, -1, true, { '', g_comments_headline_md })
-        local comments = issue_json.comments
-        if #comments == 0 then
-            a.nvim_buf_set_lines(buf, -1, -1, true, { '', 'No comments' })
-        else
-            for _, comment in ipairs(comments) do
-                local author = comment.author.login
-                local timestamp = comment.createdAt
-                local body = string.gsub(comment.body, "\r", "")
-                a.nvim_buf_set_lines(buf, -1, -1, true, { '', '#### `@' .. author .. '` at __' .. timestamp .. "__", '' })
-                a.nvim_buf_set_lines(buf, -1, -1, true, vim.split(vim.trim(body), '\n'))
-            end
-        end
-    end
-    a.nvim_set_option_value('modifiable', false, { buf = buf })
-    a.nvim_set_option_value('readonly', true, { buf = buf })
-    return buf
-end
-
----Return the comma separated list of labels from the issue buffer @c buf if possible.
----@param buf number Buffer-ID for issue.
----@return string|nil labels a comma separated list of labels on success, otherwise @c nil.
-function M.get_labels_from_issue_buffer(buf)
-    local log = require("gitforge.log")
-    local curr_buf_content = a.nvim_buf_get_lines(buf, 6, 7, false)
-    local label_line = curr_buf_content[1]
-    if label_line == nil then
-        log.notify_failure("Failed to get label line from buffer " .. buf)
-        return nil;
-    end
-    -- verify that the labels line is found
-    if label_line:sub(1, 7) ~= "Labels:" then
-        log.notify_failure("Found Label line does not contain 'Labels:' at beginning of line, ERROR for line:\n" ..
-            label_line)
-        return ""
-    end
-    -- extract all labels from the line
-    return label_line:sub(9, -1)
 end
 
 ---Return the string of the current state of the issue buffer @c buf if possible.
@@ -518,7 +401,7 @@ function M.change_issue_description(buf, opts)
     local log = require("gitforge.log")
     local util = require("gitforge.utility")
     log.trace_msg("Edit Issue Description")
-    local issue_number = get_issue_id_from_buf(buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     if issue_number == nil then
         log.notify_failure("Failed to retrieve issue number for issue in buffer " .. buf)
         return
@@ -611,7 +494,7 @@ end
 function M.change_issue_state(buf, opts)
     local log = require("gitforge.log")
     log.trace_msg("Edit State - Open/Close")
-    local issue_number = get_issue_id_from_buf(buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     local issue_status = M.get_status_from_issue_buffer(buf)
 
     local compute_possible_next_states = function(current_state)
@@ -680,7 +563,7 @@ function M.cached_issues_picker()
     local default_selection_idx = 1
     for _, bufnr in ipairs(bufnrs) do
         local bufname = a.nvim_buf_get_name(bufnr)
-        local issue_number = get_issue_id_from_buf(bufnr)
+        local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(bufnr)
         local element = {
             bufnr = bufnr,
             bufname = bufname,
@@ -804,12 +687,13 @@ local create_telescope_picker_for_issue_list = function(issue_list_json)
                 -- The issue was not rendered before. Render it for the previewer, but also
                 -- cache the content in a buffer.
                 if buf == 0 then
+                    local generic_issue = require("gitforge.generic_issue")
                     -- Render once into the previewer.
                     a.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                    M.render_issue_to_buffer(self.state.bufnr, entry.value)
+                    generic_issue.render_issue_to_buffer(self.state.bufnr, entry.value)
 
                     -- Cache for snappy opening.
-                    buf = M.render_issue_to_buffer(buf, entry.value)
+                    buf = generic_issue.render_issue_to_buffer(buf, entry.value)
                     local title_ui = generic_ui.issue_title_ui(entry.value)
                     a.nvim_buf_set_name(buf, title_ui)
                     set_issue_buffer_options(buf)
@@ -889,7 +773,7 @@ function M.update_issue_buffer(buf)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
     local opts = {}
-    local issue_number = get_issue_id_from_buf(buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     local gh_call = M.fetch_issue_call(issue_number, opts)
 
     log.executed_command(gh_call)
@@ -902,7 +786,7 @@ function M.update_issue_buffer(buf)
             vim.schedule(function()
                 local issue_json = vim.fn.json_decode(handle.stdout)
                 log.trace_msg("update single issue in buf: " .. tostring(buf))
-                buf = M.render_issue_to_buffer(buf, issue_json)
+                buf = require("gitforge.generic_issue").render_issue_to_buffer(buf, issue_json)
 
                 local title_ui = generic_ui.issue_title_ui(issue_json)
                 a.nvim_buf_set_name(buf, title_ui)
@@ -915,6 +799,7 @@ end
 function M.view_issue(issue_number, opts)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
+    local generic_issue = require("gitforge.generic_issue")
 
     local buf = generic_ui.find_existing_issue_buffer(issue_number)
 
@@ -927,7 +812,7 @@ function M.view_issue(issue_number, opts)
             local data = vim.fn.json_decode(handle.stdout)
 
             log.trace_msg("view single issue in buf: " .. tostring(buf))
-            buf = M.render_issue_to_buffer(buf, data)
+            buf = generic_issue.render_issue_to_buffer(buf, data)
 
             local title_ui = generic_ui.issue_title_ui(data)
             a.nvim_buf_set_name(buf, title_ui)
@@ -964,7 +849,7 @@ end
 
 function M.change_title(buf, title_input)
     local log = require("gitforge.log")
-    local issue_number = get_issue_id_from_buf(buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     local handle_title_update = function(handle)
         vim.schedule(function()
             if handle.code ~= 0 then
@@ -981,19 +866,18 @@ function M.change_title(buf, title_input)
     call_handle:wait()
 end
 
-local create_label_update_command = function(new_label_input, previous_labels, buf)
-    require("gitforge.set")
-    local previous_labels_set = Set:createFromCSVList(previous_labels)
-    local new_labels_set = Set:createFromCSVList(new_label_input)
+---Compute the removed and added elements of a CSV list.
+---@param new_input_csv string CSV string of elements
+---@param previous_input_csv string CSV string of elements
+---@return Set added elements that were added in @c new_input_csv
+---@return Set removed elements that were remove in @c new_input_csv
+local compute_add_and_remove_sets = function(new_input_csv, previous_input_csv)
+end
 
-    local removed_labels = previous_labels_set:difference(new_labels_set)
-    local new_labels = new_labels_set:difference(previous_labels_set)
-
-    if removed_labels:empty() and new_labels:empty() then
-        return nil
-    end
-
-    local issue_number = get_issue_id_from_buf(buf)
+---@param new_labels Set
+---@param removed_labels Set
+local create_label_update_command = function(new_labels, removed_labels, buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     local gh_call = { "gh", "issue", "edit", issue_number }
 
     if not removed_labels:empty() then
@@ -1008,18 +892,10 @@ local create_label_update_command = function(new_label_input, previous_labels, b
     return gh_call
 end
 
-local create_assignee_update_command = function(new_assignees_input, previous_assignees, buf)
-    require("gitforge.set")
-    local previous_assignees_set = Set:createFromCSVList(previous_assignees)
-    local new_assignees_set = Set:createFromCSVList(new_assignees_input)
-    local removed_assignees = previous_assignees_set:difference(new_assignees_set)
-    local new_assignees = new_assignees_set:difference(previous_assignees_set)
-
-    if removed_assignees:empty() and new_assignees:empty() then
-        return nil
-    end
-
-    local issue_number = get_issue_id_from_buf(buf)
+---@param new_assignees Set
+---@param removed_assignees Set
+local create_assignee_update_command = function(new_assignees, removed_assignees, buf)
+    local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     local gh_call = { "gh", "issue", "edit", issue_number }
 
     if not removed_assignees:empty() then
@@ -1037,13 +913,20 @@ end
 ---Changes the labels of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
 ---@param buf number Buffer-ID of the issue
----@param previous_labels string comma separated list of the previous labels, used for set difference
----@param new_labels string comma separated list of new labels, used for set difference
-function M.change_labels(buf, previous_labels, new_labels)
+---@param previous string comma separated list of the previous labels, used for set difference
+---@param new string comma separated list of new labels, used for set difference
+function M.change_labels(buf, previous, new)
+    require("gitforge.set")
     local log = require("gitforge.log")
-    local gh_call = create_label_update_command(new_labels, previous_labels, buf)
-    if gh_call == nil then
+
+    local added, removed = Set:createFromCSVList(previous):deltaTo(Set:createFromCSVList(new))
+    if removed:empty() and added:empty() then
         log.ephemeral_info("Labels did not change.")
+        return
+    end
+    local gh_call = create_label_update_command(added, removed, buf)
+    if gh_call == nil then
+        log.notify_failure("Failed to generate command to update labels.")
         return
     end
     local handle_label_update = function(handle)
@@ -1066,13 +949,21 @@ end
 ---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to
 ---comma separated list in @c new_labels
 ---@param buf number Buffer-ID of the issue
----@param previous_assignees string comma separated list of the previous assignees, used for set difference
----@param new_assignees string comma separated list of new assignees, used for set difference
-function M.change_assignees(buf, previous_assignees, new_assignees)
+---@param previous string comma separated list of the previous assignees, used for set difference
+---@param new string comma separated list of new assignees, used for set difference
+function M.change_assignees(buf, previous, new)
+    require("gitforge.set")
     local log = require("gitforge.log")
-    local gh_call = create_assignee_update_command(new_assignees, previous_assignees, buf)
-    if gh_call == nil then
+
+    local added, removed = Set:createFromCSVList(previous):deltaTo(Set:createFromCSVList(new))
+    if removed:empty() and added:empty() then
         log.ephemeral_info("Assignees did not change.")
+        return
+    end
+
+    local gh_call = create_assignee_update_command(added, removed, buf)
+    if gh_call == nil then
+        log.notify_failure("Failed to create command to update assignees")
         return
     end
     local handle_assignee_update = function(handle)
