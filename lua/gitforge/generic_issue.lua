@@ -159,6 +159,8 @@ function GenericIssue.set_issue_buffer_options(provider)
         key_opts_from_desc("Edit Issue Body"))
     vim.keymap.set("n", keys.state, function() ia.change_issue_state(provider) end,
         key_opts_from_desc("Edit State - Reopen/Close"))
+    vim.keymap.set("n", keys.webview, function() ia.view_issue_web(provider) end,
+        key_opts_from_desc("View in Browser"))
 end
 
 --- Parses the buffer name and tries to retrieve the issue number and project.

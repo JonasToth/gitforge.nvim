@@ -25,6 +25,7 @@ opts.issue_keys.labels = "<localleader>l"
 opts.issue_keys.assignees = "<localleader>a"
 opts.issue_keys.description = "<localleader>d"
 opts.issue_keys.state = "<localleader>s"
+opts.issue_keys.webview = "<localleader>w"
 ```
 
 

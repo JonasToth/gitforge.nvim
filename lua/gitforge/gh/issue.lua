@@ -12,6 +12,7 @@
 ---@field cmd_comment function
 ---@field cmd_create_issue function
 ---@field cmd_list_issues function
+---@field cmd_view_web function
 ---@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
 local GHIssue = {}
@@ -190,6 +191,11 @@ function GHIssue:cmd_list_issues(opts)
         table.insert(gh_call, opts.assignee)
     end
     return gh_call
+end
+
+---@return table command
+function GHIssue:cmd_view_web()
+    return { "gh", "issue", "view", "--web", self.issue_number }
 end
 
 ---@param current_state string Current state of the issue.

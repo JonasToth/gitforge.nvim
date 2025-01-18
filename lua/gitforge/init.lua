@@ -10,6 +10,7 @@ local M = {}
 ---@field assignees string Key bind to change the labels.
 ---@field description string Key bind to change the description.
 ---@field state string Key bind to change the state.
+---@field webview string Key bind to open the issue in a browser.
 
 ---@class GForgeGithub
 ---@field executable string Path to 'gh' cli executable.
@@ -38,6 +39,7 @@ function M.setup(opts)
     M.opts.issue_keys.assignees = ik.assignees or "<localleader>a"
     M.opts.issue_keys.description = ik.description or "<localleader>d"
     M.opts.issue_keys.state = ik.state or "<localleader>s"
+    M.opts.issue_keys.webview = ik.webview or "<localleader>w"
 
     M.opts.github = opts.github or {}
     M.opts.github.executable = opts.github.executable or "gh"
