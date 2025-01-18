@@ -2,13 +2,14 @@
 
 This plugin aims to provide integrated access to various Git Forges for your daily development
 tasks - working with issues, working with PRs and checking CI/CD pipelines.
+Its goal is being a workhorse plugin that is reliable and stable.
 
 > [!WARNING]
 > This plugin is in an early development state. Things may not work, they are clumsy and may break
 > randomly after an update.
 > Please keep this in mind.
 
-Read more about the goals and development milestones under [development resources](development_resources/README.md).
+You can read more about the goals and development milestones under [development resources](development_resources/README.md).
 
 ## Installation
 
@@ -66,23 +67,23 @@ Please call any of the following commands  to see if any issues are detected by 
 Interacting with an issue buffer is done through key binding using the `<localleader>` key.
 Closing an issue is done with `q`. The key bindings are configurable as [documented here](/docs/configuration.md#issue-settings).
 
-| Single Issue             | Default Binding                     | Github | Gitlab |
-|-------------------------:|:-----------------------------------:|:------:|:------:|
-| Create New Issue         | `:GForgeCreateIssue`                | ✓      | ✓      |
-| List All Issues          | `:GForgeListIssues`                 | ✓      | ✓      |
-| List Locally Open Issues | `:GForgeOpenedIssues`               | ✓      | ✓      |
+| Single Issue             | Default Binding         | Github | Gitlab |
+| -----------------------: | :---------------------: | :----: | :----: |
+| Create New Issue         | `:GForgeCreateIssue`    |   ✓    |   ✓    |
+| List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
+| List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
 
-| Issue-Buffer Actions     | Default Binding                     | Github | Gitlab |
-|-------------------------:|:-----------------------------------:|:------:|:------:|
-| Hide Issue               | `q`                                 | ✓      | ✓      |
-| Refresh Content          | `<localleader>u`                    | ✓      | ✓      |
-| Edit Title               | `<localleader>t`                    | ✓      | ✓      |
-| Edit Labels              | `<localleader>l`                    | ✓      | ✓      |
-| Edit Assignees           | `<localleader>a`                    | ✓      | ✓      |
-| Edit Description         | `<localleader>d`                    | ✓      | ✓      |
-| Open/Close Issue         | `<localleader>s`                    | ✓      | ✓      |
-| Add comment              | `<localleader>c`                    | ✓      | ✓      |
-| Open in Browser          | `<localleader>w`                    | ✓      | ✓      |
+| Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
+| -----------------------: | :---------------------: | :----: | :----: |
+| Hide Issue               | `q`                     |   ✓    |   ✓    |
+| Refresh Content          | `<localleader>u`        |   ✓    |   ✓    |
+| Edit Title               | `<localleader>t`        |   ✓    |   ✓    |
+| Edit Labels              | `<localleader>l`        |   ✓    |   ✓    |
+| Edit Assignees           | `<localleader>a`        |   ✓    |   ✓    |
+| Edit Description         | `<localleader>d`        |   ✓    |   ✓    |
+| Open/Close Issue         | `<localleader>s`        |   ✓    |   ✓    |
+| Add comment              | `<localleader>c`        |   ✓    |   ✓    |
+| Open in Browser          | `<localleader>w`        |   ✓    |   ✓    |
 
 ### Configuration
 
