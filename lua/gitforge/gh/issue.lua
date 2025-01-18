@@ -59,14 +59,18 @@ function GHIssue:newFromLink(issue_link)
     return self:newIssue(tostring(int_id))
 end
 
+function GHIssue:cmd()
+    return require("gitforge").opts.github.executable
+end
+
 function GHIssue:edit_cmd()
-    return { "gh", "issue", "edit", self.issue_number }
+    return { self:cmd(), "issue", "edit", self.issue_number }
 end
 
 function GHIssue:cmd_fetch()
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local gh_call = { "gh", "issue", "view", self.issue_number, "--json", required_fields }
+    local gh_call = { self:cmd(), "issue", "view", self.issue_number, "--json", required_fields }
     -- if opts.project then
     --     table.insert(gh_call, "-R")
     --     table.insert(gh_call, opts.project)
@@ -127,7 +131,7 @@ end
 ---@param new_state string
 ---@return table|nil Command
 function GHIssue:cmd_state_change(new_state)
-    local gh_call = { "gh", "issue", }
+    local gh_call = { self:cmd(), "issue", }
     if new_state == "CLOSED completed" then
         table.insert(gh_call, "close")
         table.insert(gh_call, self.issue_number)
@@ -149,13 +153,13 @@ end
 
 ---@param comment_file string Path to temporary file to comment on
 function GHIssue:cmd_comment(comment_file)
-    return { "gh", "issue", "comment", self.issue_number, "--body-file", comment_file }
+    return { self:cmd(), "issue", "comment", self.issue_number, "--body-file", comment_file }
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
 function GHIssue:cmd_create_issue(title, description_file)
-    return { "gh", "issue", "create", "--title", title, "--body-file", description_file }
+    return { self:cmd(), "issue", "create", "--title", title, "--body-file", description_file }
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
@@ -186,7 +190,7 @@ end
 function GHIssue:cmd_list_issues(opts)
     local required_fields =
     "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
-    local gh_call = { "gh", "issue", "list", "--state", "all", "--json", required_fields }
+    local gh_call = { self:cmd(), "issue", "list", "--state", "all", "--json", required_fields }
     if opts.state then
         table.insert(gh_call, "--state")
         table.insert(gh_call, opts.state)
@@ -212,7 +216,7 @@ end
 
 ---@return table command
 function GHIssue:cmd_view_web()
-    return { "gh", "issue", "view", "--web", self.issue_number }
+    return { self:cmd(), "issue", "view", "--web", self.issue_number }
 end
 
 ---@param current_state string Current state of the issue.
