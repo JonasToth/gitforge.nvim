@@ -14,12 +14,16 @@ local M = {}
 
 ---@class GForgeGithub
 ---@field executable string Path to 'gh' cli executable.
+---
+---@class GForgeGitLab
+---@field executable string Path to 'glab' cli executable.
 
 ---@class GForgeOptions
 ---Defines plugin options.
 ---@field timeout integer Milliseconds on how long to wait for command completion.
 ---@field issue_keys GForgeIssueKeys?
 ---@field github GForgeGithub?
+---@field gitlab GForgeGitLab?
 ---@field default_issue_provider string Module name that provides issue content by default.
 
 ---@param opts GForgeOptions
@@ -43,6 +47,9 @@ function M.setup(opts)
 
     M.opts.github = opts.github or {}
     M.opts.github.executable = opts.github.executable or "gh"
+
+    M.opts.gitlab = opts.gitlab or {}
+    M.opts.gitlab.executable = opts.gitlab.executable or "glab"
 
     M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
 

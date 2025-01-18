@@ -1,5 +1,15 @@
 local M = {}
 
+---@param path string Path to a file
+---@return string|nil The content of the file read with 'rb' or nil if that failed.
+function M.read_file_to_string(path)
+    local file = io.open(path, "rb") -- r read mode and b binary mode
+    if not file then return nil end
+    local content = file:read "*a" -- *a or *all reads the whole file
+    file:close()
+    return content
+end
+
 ---Creates a string from the buffer content of @p buf
 ---@param buf integer Buffer Id to get the content from.
 ---@return string content Concatenation with "\n" and final trimming of the buffer content.

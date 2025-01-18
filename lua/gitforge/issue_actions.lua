@@ -256,25 +256,12 @@ function IssueActions.create_issue(provider)
     local show_issue_after_creation = function(handle)
         cleanup_description_file()
         if handle.code ~= 0 then
-            log.notify_failure("Failed to create issue: \n" .. handle.stderr)
+            log.notify_failure("Failed to create issue: \n" .. handle.stderr .. "\nReturn Code: " .. handle.code)
             return
         end
-        local lines = vim.split(handle.stdout, "\n")
-        local issue_link
-        for index, value in ipairs(lines) do
-            if index == 1 then
-                issue_link = value
-                break
-            end
-        end
-        if issue_link == nil or #issue_link == 0 then
-            log.notify_failure("Failed to retrieve issue link for new issue")
-            log.trace_msg(vim.join(lines, "\n"))
-            return
-        end
-        log.notify_change("Created a new issue")
-        local p = prov:newFromLink(issue_link)
+        local p = prov:handle_create_issue_output_to_view_issue(handle.stdout)
         if p == nil then
+            log.notify_change("Created the issue but failed to view it directly.")
             return
         end
         vim.schedule(function() IssueActions.view_issue(p) end)
