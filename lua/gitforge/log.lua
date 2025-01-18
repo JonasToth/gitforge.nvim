@@ -30,7 +30,7 @@ function Log.executed_command(command_table)
     if command_table == nil then
         vim.schedule(function() vim.api.nvim_err_writeln("Tries to log nil as command") end)
     else
-        vim.schedule(function() vim.inspect(command_table) end)
+        vim.schedule(function() print(vim.inspect(command_table)) end)
     end
 end
 

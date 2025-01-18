@@ -73,6 +73,7 @@ end
 
 ---@param provider GHIssue|nil
 ---@param completion function|nil
+---@return vim.SystemObj|nil
 function GenericUI.refresh_issue(provider, completion)
     local log = require("gitforge.log")
     local prov = provider or require(require("gitforge").opts.default_issue_provider)
@@ -130,7 +131,8 @@ function GenericUI.perform_issue_update_cmd(provider, command_generator)
             GenericUI.refresh_issue(prov)
         end)
     end
-    require("gitforge.utility").async_exec(command, handle_cmd_completion):wait()
+    local handle = require("gitforge.utility").async_exec(command, handle_cmd_completion)
+    if handle then handle:wait() end
 end
 
 ---@param buf integer

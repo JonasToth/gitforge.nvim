@@ -1,5 +1,12 @@
 local IssueActions = {}
 
+---@class IssueListOpts
+---@field state string? List issues only with specific state (e.g. open/closed)
+---@field project string?
+---@field limit integer? Limit the number of issues
+---@field labels string? CSV-separated list of labels
+---@field assignee string? CSV-separated list of assignees
+
 ---@param provider GHIssue|nil
 function IssueActions.comment_on_issue(provider)
     local log = require("gitforge.log")
@@ -221,9 +228,10 @@ function IssueActions.view_issue(provider)
 
     prov.buf = generic_ui.find_existing_issue_buffer(prov.issue_number)
     if prov.buf == 0 then
-        generic_ui.refresh_issue(prov, function(p)
+        local handle = generic_ui.refresh_issue(prov, function(p)
             generic_ui.create_issue_window(p.buf)
-        end):wait()
+        end)
+        if handle then handle:wait() end
     else
         log.trace_msg("Found issue in buffer - displaying old state and triggering update")
         generic_ui.create_issue_window(prov.buf)
@@ -273,7 +281,8 @@ function IssueActions.create_issue(provider)
     end
     local create_issue_call = function()
         local cmd = prov:cmd_create_issue(title, description_file)
-        require("gitforge.utility").async_exec(cmd, show_issue_after_creation):wait()
+        local handle = require("gitforge.utility").async_exec(cmd, show_issue_after_creation)
+        if handle then handle:wait() end
     end
     local write_description_in_tmp_buffer = function()
         local buf = vim.api.nvim_create_buf(false, false)
@@ -417,7 +426,7 @@ function IssueActions.list_issues(opts, provider)
 
     local open_telescope_list = function(handle)
         if handle.code ~= 0 then
-            log.ephemeral_info("Failed to retrieve issue list")
+            log.notify_failure("Failed to retrieve issue list:" .. handle.stdout .. "\n" .. handle.stderr)
             return
         end
         vim.schedule(function()
@@ -425,7 +434,8 @@ function IssueActions.list_issues(opts, provider)
             create_telescope_picker_for_issue_list(data, prov)
         end)
     end
-    require("gitforge.utility").async_exec(prov:cmd_list_issues(opts), open_telescope_list):wait()
+    local handle = require("gitforge.utility").async_exec(prov:cmd_list_issues(opts), open_telescope_list)
+    if handle then handle:wait() end
 end
 
 ---@param provider GHIssue|nil
@@ -530,7 +540,8 @@ function IssueActions.view_issue_web(provider)
             return
         end
     end
-    require("gitforge.utility").async_exec(prov:cmd_view_web(), webview_completer):wait()
+    local handle = require("gitforge.utility").async_exec(prov:cmd_view_web(), webview_completer)
+    if handle then handle:wait() end
 end
 
 return IssueActions
