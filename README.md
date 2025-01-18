@@ -20,8 +20,12 @@ You can read more about the goals and development milestones under [development 
 local ia = "gitforge.issue_actions"
 return {
     "JonasToth/gitforge.nvim",
-    cmd = { "GForgeListIssues", "GForgeOpenedIssues", "GForgeCreateIssue" },
+    dependencies = {
+        { "nvim-telescope/telescope.nvim" },
+    },
+    cmd = { "GForgeViewIssue", "GForgeListIssues", "GForgeOpenedIssues", "GForgeCreateIssue" },
     keys = {
+        { "<leader>gv", "<cmd>GForgeViewIssue<CR>",    desc = "View an issue" },
         { "<leader>gn", "<cmd>GForgeCreateIssue<CR>",  desc = "Create a new issue" },
         { "<leader>gg", "<cmd>GForgeOpenedIssues<CR>", desc = "List opened issue" },
         {
@@ -69,6 +73,7 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 
 | Single Issue             | Default Binding         | Github | Gitlab |
 | -----------------------: | :---------------------: | :----: | :----: |
+| View an Issue            | `:GForgeViewIssue`      |   ✓    |   ✓    |
 | Create New Issue         | `:GForgeCreateIssue`    |   ✓    |   ✓    |
 | List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
 | List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
