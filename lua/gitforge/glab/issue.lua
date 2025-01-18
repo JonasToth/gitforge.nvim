@@ -59,14 +59,18 @@ function GLabIssue:newFromLink(issue_link)
     return self:newIssue(tostring(int_id))
 end
 
+function GLabIssue:cmd()
+    return require("gitforge").opts.gitlab.executable
+end
+
 function GLabIssue:edit_cmd()
-    return { "glab", "issue", "edit", self.issue_number }
+    return { self:cmd(), "issue", "edit", self.issue_number }
 end
 
 function GLabIssue:cmd_fetch()
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local cmd = { "glab", "issue", "view", self.issue_number, "--json", required_fields }
+    local cmd = { self:cmd(), "issue", "view", self.issue_number, "--json", required_fields }
     -- if opts.project then
     --     table.insert(cmd, "-R")
     --     table.insert(cmd, opts.project)
@@ -127,7 +131,7 @@ end
 ---@param new_state string
 ---@return table|nil Command
 function GLabIssue:cmd_state_change(new_state)
-    local cmd = { "glab", "issue", }
+    local cmd = { self:cmd(), "issue", }
     if new_state == "CLOSED completed" then
         table.insert(cmd, "close")
         table.insert(cmd, self.issue_number)
@@ -149,14 +153,14 @@ end
 
 ---@param comment_file string Path to temporary file to comment on
 function GLabIssue:cmd_comment(comment_file)
-    return { "glab", "issue", "comment", self.issue_number, "--body-file", comment_file }
+    return { self:cmd(), "issue", "comment", self.issue_number, "--body-file", comment_file }
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
 function GLabIssue:cmd_create_issue(title, description_file)
     local desc_str = require("gitforge.utility").read_file_to_string(description_file)
-    return { "glab", "issue", "create", "--title", title, "--description", desc_str, "--yes" }
+    return { self:cmd(), "issue", "create", "--title", title, "--description", desc_str, "--yes" }
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
@@ -171,7 +175,7 @@ end
 function GLabIssue:cmd_list_issues(opts)
     local required_fields =
     "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
-    local cmd = { "glab", "issue", "list", "--output", "json" }
+    local cmd = { self:cmd(), "issue", "list", "--output", "json" }
     if opts.state == "open" then
         -- thats the default
     elseif opts.state == "closed" then
@@ -200,7 +204,7 @@ end
 
 ---@return table command
 function GLabIssue:cmd_view_web()
-    return { "glab", "issue", "view", "--web", self.issue_number }
+    return { self:cmd(), "issue", "view", "--web", self.issue_number }
 end
 
 ---@param current_state string Current state of the issue.
