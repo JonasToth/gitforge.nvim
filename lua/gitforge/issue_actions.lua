@@ -351,7 +351,8 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                 end
                 local labels_str = vim.fn.join(issue_labels, ",")
                 local assignee_str = vim.fn.join(assignees, ",")
-                local search_ordinal = entry.title .. ":" .. tostring(entry.number) .. ":" .. labels_str .. ":" .. assignee_str
+                local search_ordinal = entry.title ..
+                    ":" .. tostring(entry.number) .. ":" .. labels_str .. ":" .. assignee_str
                 return make_entry.set_default_entry_mt({
                     ordinal = search_ordinal,
                     title = entry.title,
@@ -512,6 +513,24 @@ function IssueActions.list_opened_issues(provider)
             end,
         })
         :find()
+end
+
+---@param provider GHIssue|nil
+function IssueActions.view_issue_web(provider)
+    local log = require("gitforge.log")
+    local prov = provider or require(require("gitforge").opts.default_issue_provider)
+
+    log.notify_change("Opening browser for issue " .. prov.issue_number)
+    local webview_completer = function(handle)
+        if handle.code ~= 0 then
+            --TODO: Better error logging
+            vim.api.nvim_err_write(handle.stderr)
+            vim.api.nvim_err_write(handle.stdout)
+            log.notify_failure("Failed to open issue!")
+            return
+        end
+    end
+    require("gitforge.utility").async_exec(prov:cmd_view_web(), webview_completer):wait()
 end
 
 return IssueActions
