@@ -40,7 +40,7 @@ function GLabIssue:newFromLink(issue_link)
     local url_elements = vim.split(issue_link, "/")
     local id
     for index, value in ipairs(url_elements) do
-        if index == 7 then
+        if index == 8 then
             id = value
             break
         end
@@ -165,14 +165,28 @@ end
 ---                     the issue id and return a provider for that issue.
 ---@return GHIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
 function GLabIssue:handle_create_issue_output_to_view_issue(output)
-    return nil
+    local log = require("gitforge.log")
+
+    local lines = vim.split(output, "\n")
+    local issue_link
+    for index, value in ipairs(lines) do
+        if index == 1 then
+            issue_link = value
+            break
+        end
+    end
+    if issue_link == nil or #issue_link == 0 then
+        log.notify_failure("Failed to retrieve issue link for new issue")
+        log.trace_msg(vim.join(lines, "\n"))
+        return nil
+    end
+    log.notify_change("Created a new issue")
+    return GLabIssue:newFromLink(issue_link)
 end
 
 ---@param opts IssueListOpts
 ---@return table command
 function GLabIssue:cmd_list_issues(opts)
-    local required_fields =
-    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
     local cmd = { self:cmd(), "issue", "list", "--output", "json" }
     if opts.state == "open" then
         -- thats the default
