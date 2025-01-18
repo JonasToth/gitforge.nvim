@@ -62,11 +62,27 @@ Please call any of the following commands  to see if any issues are detected by 
 > ```
 > You can change your working directory in `nvim` with the `:cd path/to/new/directory` command.
 
+Interacting with an issue buffer is done through key binding using the `<localleader>` key.
+Closing an issue is done with `q`. The key bindings are configurable as [documented here](/docs/configuration.md#issue-settings).
+
+|Issue-Action      | Default Binding    | Github | Gitlab |
+|-----------------:|:------------------:|:------:|:------:|
+| Hide Issue       | `q`                | [x]    | [x]    |
+| Refresh Content  | `<localleader>u`   | [x]    | [x]    |
+| Edit Title       | `<localleader>t`   | [x]    | [x]    |
+| Edit Labels      | `<localleader>l`   | [x]    | [x]    |
+| Edit Assignees   | `<localleader>a`   | [x]    | [x]    |
+| Edit Description | `<localleader>d`   | [x]    | [x]    |
+| Open/Close Issue | `<localleader>s`   | [x]    | [x]    |
+| Add comment      | `<localleader>c`   | [x]    | [x]    |
+| Open in Browser  | `<localleader>w`   | [x]    | [x]    |
+
+### Configuration
+
 This plugin probably requires a bit of configuration to select the elements issues that are of your interest.
 Smaller projects are probably fine without the more complicated key bindings. Large projects certainly aren't.
-
-Interacting with an issue buffer is done through key binding using the `<localleader>` key.
-Closing an issue is done with `q`. The rest of the binding are [documented here](/docs/configuration.md#issue-settings).
+To view only issues with specific labels, e.g. for a subproject is possible, but requires calling the matching
+`lua` functions with proper arguments.
 
 See [docs/configuration.md](docs/configuration.md) for more information on how to configure the plugin.
 
@@ -100,12 +116,12 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
     - [x] Editing a single issue
     - [x] Commenting on an issue
     - [x] Closing and Reopening an issue
-- [ ] GitLab (using `glab` cli)
-    - [ ] Listing Issues via `telescope.nvim`
+- [x] GitLab (using `glab` cli)
+    - [x] Listing Issues via `telescope.nvim`
     - [x] Creating an issue
-    - [ ] Editing a single issue
-    - [ ] Commenting on an issue
-    - [ ] Closing and Reopening an issue
+    - [x] Editing a single issue
+    - [x] Commenting on an issue
+    - [x] Closing and Reopening an issue
 
 ### Pull Requests
 

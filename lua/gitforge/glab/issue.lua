@@ -8,12 +8,12 @@
 ---@field cmd_label_change function
 ---@field cmd_assignee_change function
 ---@field cmd_description_change function
+---@field next_possible_states function Compute next possible issue states from current state.
 ---@field cmd_state_change function
 ---@field cmd_comment function
 ---@field cmd_create_issue function
 ---@field cmd_list_issues function
 ---@field cmd_view_web function
----@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
 ---@field handle_create_issue_output_to_view_issue function
 local GLabIssue = {}
@@ -64,7 +64,7 @@ function GLabIssue:cmd()
 end
 
 function GLabIssue:edit_cmd()
-    return { self:cmd(), "issue", "edit", self.issue_number }
+    return { self:cmd(), "issue", "update", self.issue_number }
 end
 
 function GLabIssue:cmd_fetch()
@@ -76,37 +76,30 @@ function GLabIssue:cmd_fetch()
     return cmd
 end
 
----@param new_labels Set
+---@param added_labels Set
 ---@param removed_labels Set
-function GLabIssue:cmd_label_change(new_labels, removed_labels)
+function GLabIssue:cmd_label_change(added_labels, removed_labels)
     local cmd = self:edit_cmd()
 
+    if not added_labels:empty() then
+        table.insert(cmd, "--label")
+        table.insert(cmd, added_labels:toCSV())
+    end
     if not removed_labels:empty() then
-        table.insert(cmd, "--remove-label")
+        table.insert(cmd, "--unlabel")
         table.insert(cmd, removed_labels:toCSV())
     end
 
-    if not new_labels:empty() then
-        table.insert(cmd, "--add-label")
-        table.insert(cmd, new_labels:toCSV())
-    end
     return cmd
 end
 
----@param new_assignees Set
----@param removed_assignees Set
-function GLabIssue:cmd_assignee_change(new_assignees, removed_assignees)
+---@param new Set
+---@param added_assignees Set unused
+---@param removed_assignees Set unused
+function GLabIssue:cmd_assignee_change(new, added_assignees, removed_assignees)
     local cmd = self:edit_cmd()
-
-    if not removed_assignees:empty() then
-        table.insert(cmd, "--remove-assignee")
-        table.insert(cmd, removed_assignees:toCSV())
-    end
-
-    if not new_assignees:empty() then
-        table.insert(cmd, "--add-assignee")
-        table.insert(cmd, new_assignees:toCSV())
-    end
+    table.insert(cmd, "--assignee")
+    table.insert(cmd, new:toCSV())
     return cmd
 end
 
@@ -121,26 +114,33 @@ end
 ---@param new_desc_file string File-path to temporary file containing the new description.
 function GLabIssue:cmd_description_change(new_desc_file)
     local cmd = self:edit_cmd()
-    table.insert(cmd, "--body-file")
-    table.insert(cmd, new_desc_file)
+    local new_desc = require("gitforge.utility").read_file_to_string(new_desc_file)
+    if #new_desc == 0 then
+        new_desc = " "
+    end
+    table.insert(cmd, "--description")
+    table.insert(cmd, new_desc)
     return cmd
+end
+
+---@param current_state string Current state of the issue.
+---@return table|nil possible_state A list of possible new states.
+function GLabIssue:next_possible_states(current_state)
+    if current_state == "opened" then
+        return { "closed", current_state }
+    else
+        return { "reopen", current_state }
+    end
 end
 
 ---@param new_state string
 ---@return table|nil Command
 function GLabIssue:cmd_state_change(new_state)
     local cmd = { self:cmd(), "issue", }
-    if new_state == "CLOSED completed" then
+    if new_state == "closed" then
         table.insert(cmd, "close")
         table.insert(cmd, self.issue_number)
-        table.insert(cmd, "--reason")
-        table.insert(cmd, "completed")
-    elseif new_state == "CLOSED not planned" then
-        table.insert(cmd, "close")
-        table.insert(cmd, self.issue_number)
-        table.insert(cmd, "--reason")
-        table.insert(cmd, "not planned")
-    elseif new_state == "REOPEN" then
+    elseif new_state == "reopen" then
         table.insert(cmd, "reopen")
         table.insert(cmd, self.issue_number)
     else
@@ -151,7 +151,10 @@ end
 
 ---@param comment_file string Path to temporary file to comment on
 function GLabIssue:cmd_comment(comment_file)
-    return { self:cmd(), "issue", "comment", self.issue_number, "--body-file", comment_file }
+    return {
+        self:cmd(), "issue", "note", self.issue_number, "--message",
+        require("gitforge.utility").read_file_to_string(comment_file)
+    }
 end
 
 ---@param title string Title of new issue, must not be empty.
@@ -219,16 +222,6 @@ function GLabIssue:cmd_view_web()
     return { self:cmd(), "issue", "view", "--web", self.issue_number }
 end
 
----@param current_state string Current state of the issue.
----@return table|nil possible_state A list of possible new states.
-function GLabIssue:next_possible_states(current_state)
-    if current_state == "OPEN" then
-        return { "CLOSED completed", "CLOSED not planned", current_state }
-    else
-        return { "REOPEN", current_state }
-    end
-end
-
 ---@return Author
 local conv_glab_author = function(glab_author)
     return {
@@ -275,7 +268,9 @@ end
 local conv_glab_comments = function(glab_comments)
     local result = {}
     for _, c in pairs(glab_comments) do
-        table.insert(result, conv_glab_comment(c))
+        if not c.system then
+            table.insert(result, conv_glab_comment(c))
+        end
     end
     return result
 end
