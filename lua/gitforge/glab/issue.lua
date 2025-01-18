@@ -1,5 +1,5 @@
 ---Provides executable calls to manipulate and view issues on Github.
----@class GHIssue
+---@class GLabIssue
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -16,17 +16,17 @@
 ---@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
 ---@field handle_create_issue_output_to_view_issue function
-local GHIssue = {}
+local GLabIssue = {}
 
-function GHIssue:new(buf)
-    local s = setmetatable({}, { __index = GHIssue })
+function GLabIssue:new(buf)
+    local s = setmetatable({}, { __index = GLabIssue })
     s.buf = buf
     s.issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
     return s
 end
 
-function GHIssue:newIssue(issue_number)
-    local s = setmetatable({}, { __index = GHIssue })
+function GLabIssue:newIssue(issue_number)
+    local s = setmetatable({}, { __index = GLabIssue })
     s.buf = 0
     s.issue_number = issue_number
     return s
@@ -34,7 +34,7 @@ end
 
 ---@param issue_link string URL to the issue
 ---@return GHIssue|nil
-function GHIssue:newFromLink(issue_link)
+function GLabIssue:newFromLink(issue_link)
     local log = require("gitforge.log")
 
     local url_elements = vim.split(issue_link, "/")
@@ -59,165 +59,153 @@ function GHIssue:newFromLink(issue_link)
     return self:newIssue(tostring(int_id))
 end
 
-function GHIssue:edit_cmd()
-    return { "gh", "issue", "edit", self.issue_number }
+function GLabIssue:edit_cmd()
+    return { "glab", "issue", "edit", self.issue_number }
 end
 
-function GHIssue:cmd_fetch()
+function GLabIssue:cmd_fetch()
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local gh_call = { "gh", "issue", "view", self.issue_number, "--json", required_fields }
+    local cmd = { "glab", "issue", "view", self.issue_number, "--json", required_fields }
     -- if opts.project then
-    --     table.insert(gh_call, "-R")
-    --     table.insert(gh_call, opts.project)
+    --     table.insert(cmd, "-R")
+    --     table.insert(cmd, opts.project)
     -- end
-    return gh_call
+    return cmd
 end
 
 ---@param new_labels Set
 ---@param removed_labels Set
-function GHIssue:cmd_label_change(new_labels, removed_labels)
-    local gh_call = self:edit_cmd()
+function GLabIssue:cmd_label_change(new_labels, removed_labels)
+    local cmd = self:edit_cmd()
 
     if not removed_labels:empty() then
-        table.insert(gh_call, "--remove-label")
-        table.insert(gh_call, removed_labels:toCSV())
+        table.insert(cmd, "--remove-label")
+        table.insert(cmd, removed_labels:toCSV())
     end
 
     if not new_labels:empty() then
-        table.insert(gh_call, "--add-label")
-        table.insert(gh_call, new_labels:toCSV())
+        table.insert(cmd, "--add-label")
+        table.insert(cmd, new_labels:toCSV())
     end
-    return gh_call
+    return cmd
 end
 
 ---@param new_assignees Set
 ---@param removed_assignees Set
-function GHIssue:cmd_assignee_change(new_assignees, removed_assignees)
-    local gh_call = self:edit_cmd()
+function GLabIssue:cmd_assignee_change(new_assignees, removed_assignees)
+    local cmd = self:edit_cmd()
 
     if not removed_assignees:empty() then
-        table.insert(gh_call, "--remove-assignee")
-        table.insert(gh_call, removed_assignees:toCSV())
+        table.insert(cmd, "--remove-assignee")
+        table.insert(cmd, removed_assignees:toCSV())
     end
 
     if not new_assignees:empty() then
-        table.insert(gh_call, "--add-assignee")
-        table.insert(gh_call, new_assignees:toCSV())
+        table.insert(cmd, "--add-assignee")
+        table.insert(cmd, new_assignees:toCSV())
     end
-    return gh_call
+    return cmd
 end
 
 ---@param new_title string Non-empty string to change the title to.
-function GHIssue:cmd_title_change(new_title)
-    local gh_call = self:edit_cmd()
-    table.insert(gh_call, "--title")
-    table.insert(gh_call, new_title)
-    return gh_call
+function GLabIssue:cmd_title_change(new_title)
+    local cmd = self:edit_cmd()
+    table.insert(cmd, "--title")
+    table.insert(cmd, new_title)
+    return cmd
 end
 
 ---@param new_desc_file string File-path to temporary file containing the new description.
-function GHIssue:cmd_description_change(new_desc_file)
-    local gh_call = self:edit_cmd()
-    table.insert(gh_call, "--body-file")
-    table.insert(gh_call, new_desc_file)
-    return gh_call
+function GLabIssue:cmd_description_change(new_desc_file)
+    local cmd = self:edit_cmd()
+    table.insert(cmd, "--body-file")
+    table.insert(cmd, new_desc_file)
+    return cmd
 end
 
 ---@param new_state string
 ---@return table|nil Command
-function GHIssue:cmd_state_change(new_state)
-    local gh_call = { "gh", "issue", }
+function GLabIssue:cmd_state_change(new_state)
+    local cmd = { "glab", "issue", }
     if new_state == "CLOSED completed" then
-        table.insert(gh_call, "close")
-        table.insert(gh_call, self.issue_number)
-        table.insert(gh_call, "--reason")
-        table.insert(gh_call, "completed")
+        table.insert(cmd, "close")
+        table.insert(cmd, self.issue_number)
+        table.insert(cmd, "--reason")
+        table.insert(cmd, "completed")
     elseif new_state == "CLOSED not planned" then
-        table.insert(gh_call, "close")
-        table.insert(gh_call, self.issue_number)
-        table.insert(gh_call, "--reason")
-        table.insert(gh_call, "not planned")
+        table.insert(cmd, "close")
+        table.insert(cmd, self.issue_number)
+        table.insert(cmd, "--reason")
+        table.insert(cmd, "not planned")
     elseif new_state == "REOPEN" then
-        table.insert(gh_call, "reopen")
-        table.insert(gh_call, self.issue_number)
+        table.insert(cmd, "reopen")
+        table.insert(cmd, self.issue_number)
     else
         return nil
     end
-    return gh_call
+    return cmd
 end
 
 ---@param comment_file string Path to temporary file to comment on
-function GHIssue:cmd_comment(comment_file)
-    return { "gh", "issue", "comment", self.issue_number, "--body-file", comment_file }
+function GLabIssue:cmd_comment(comment_file)
+    return { "glab", "issue", "comment", self.issue_number, "--body-file", comment_file }
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
-function GHIssue:cmd_create_issue(title, description_file)
-    return { "gh", "issue", "create", "--title", title, "--body-file", description_file }
+function GLabIssue:cmd_create_issue(title, description_file)
+    local desc_str = require("gitforge.utility").read_file_to_string(description_file)
+    return { "glab", "issue", "create", "--title", title, "--description", desc_str, "--yes" }
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
 ---                     the issue id and return a provider for that issue.
 ---@return GHIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
-function GHIssue:handle_create_issue_output_to_view_issue(output)
-    local log = require("gitforge.log")
-
-    local lines = vim.split(output, "\n")
-    local issue_link
-    for index, value in ipairs(lines) do
-        if index == 1 then
-            issue_link = value
-            break
-        end
-    end
-    if issue_link == nil or #issue_link == 0 then
-        log.notify_failure("Failed to retrieve issue link for new issue")
-        log.trace_msg(vim.join(lines, "\n"))
-        return nil
-    end
-    log.notify_change("Created a new issue")
-    return GHIssue:newFromLink(issue_link)
+function GLabIssue:handle_create_issue_output_to_view_issue(output)
+    return nil
 end
 
 ---@param opts IssueListOpts
 ---@return table command
-function GHIssue:cmd_list_issues(opts)
+function GLabIssue:cmd_list_issues(opts)
     local required_fields =
     "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
-    local gh_call = { "gh", "issue", "list", "--state", "all", "--json", required_fields }
-    if opts.state then
-        table.insert(gh_call, "--state")
-        table.insert(gh_call, opts.state)
+    local cmd = { "glab", "issue", "list", "--output", "json" }
+    if opts.state == "open" then
+        -- thats the default
+    elseif opts.state == "closed" then
+        table.insert(cmd, "--closed")
+    elseif opts.state == "all" then
+        table.insert(cmd, "--all")
     end
     if opts.project then
-        table.insert(gh_call, "-R")
-        table.insert(gh_call, opts.project)
+        table.insert(cmd, "-R")
+        table.insert(cmd, opts.project)
     end
     if opts.limit then
-        table.insert(gh_call, "--limit")
-        table.insert(gh_call, tostring(opts.limit))
+        table.insert(cmd, "--per-page")
+        table.insert(cmd, tostring(opts.limit))
     end
     if opts.labels then
-        table.insert(gh_call, "--label")
-        table.insert(gh_call, opts.labels)
+        table.insert(cmd, "--label")
+        table.insert(cmd, opts.labels)
     end
     if opts.assignee then
-        table.insert(gh_call, "--assignee")
-        table.insert(gh_call, opts.assignee)
+        table.insert(cmd, "--assignee")
+        table.insert(cmd, opts.assignee)
     end
-    return gh_call
+    return cmd
 end
 
 ---@return table command
-function GHIssue:cmd_view_web()
-    return { "gh", "issue", "view", "--web", self.issue_number }
+function GLabIssue:cmd_view_web()
+    return { "glab", "issue", "view", "--web", self.issue_number }
 end
 
 ---@param current_state string Current state of the issue.
 ---@return table|nil possible_state A list of possible new states.
-function GHIssue:next_possible_states(current_state)
+function GLabIssue:next_possible_states(current_state)
     if current_state == "OPEN" then
         return { "CLOSED completed", "CLOSED not planned", current_state }
     else
@@ -227,8 +215,8 @@ end
 
 ---@param json_input string JSON encoded result of a command execution.
 ---@return GHIssue issue Transformed JSON to the expected interface of an issue.
-function GHIssue:convert_cmd_result_to_issue(json_input)
+function GLabIssue:convert_cmd_result_to_issue(json_input)
     return vim.fn.json_decode(json_input)
 end
 
-return GHIssue
+return GLabIssue

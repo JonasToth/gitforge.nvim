@@ -102,7 +102,7 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
     - [x] Closing and Reopening an issue
 - [ ] GitLab (using `glab` cli)
     - [ ] Listing Issues via `telescope.nvim`
-    - [ ] Creating an issue
+    - [x] Creating an issue
     - [ ] Editing a single issue
     - [ ] Commenting on an issue
     - [ ] Closing and Reopening an issue
