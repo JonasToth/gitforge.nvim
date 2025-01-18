@@ -261,7 +261,7 @@ function IssueActions.create_issue(provider)
         end
         local p = prov:handle_create_issue_output_to_view_issue(handle.stdout)
         if p == nil then
-            log.notify_change("Created the issue but failed to view it directly.")
+            log.notify_change("Created the issue but failed to view it directly:\n" .. handle.stdout .. "\n" .. handle.stderr)
             return
         end
         vim.schedule(function() IssueActions.view_issue(p) end)
