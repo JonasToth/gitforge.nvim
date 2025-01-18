@@ -9,6 +9,9 @@ General settings that change the default experience:
 
 ```lua
 M.opts.timeout = 3500
+-- one of:
+-- gitforge.gh.issue
+-- gitforge.glab.issue
 M.opts.default_issue_provider = "gitforge.gh.issue"
 ```
 
@@ -17,15 +20,17 @@ M.opts.default_issue_provider = "gitforge.gh.issue"
 Keys to interact on an issue buffer:
 
 ```lua
-opts.issue_keys.close = "q"
-opts.issue_keys.update = "<localleader>u"
-opts.issue_keys.comment = "<localleader>c"
-opts.issue_keys.title = "<localleader>t"
-opts.issue_keys.labels = "<localleader>l"
-opts.issue_keys.assignees = "<localleader>a"
-opts.issue_keys.description = "<localleader>d"
-opts.issue_keys.state = "<localleader>s"
-opts.issue_keys.webview = "<localleader>w"
+opts.issue_keys = {
+    close = "q"
+    update = "<localleader>u"
+    comment = "<localleader>c"
+    title = "<localleader>t"
+    labels = "<localleader>l"
+    assignees = "<localleader>a"
+    description = "<localleader>d"
+    state = "<localleader>s"
+    webview = "<localleader>w"
+}
 ```
 
 
@@ -35,4 +40,12 @@ Github specific settings:
 
 ```lua
 opts.github.executable = "gh"
+```
+
+## GitLab Settings
+
+GitLab specific settings:
+
+```lua
+opts.gitlab.executable = "glab"
 ```

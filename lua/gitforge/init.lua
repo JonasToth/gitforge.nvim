@@ -32,6 +32,7 @@ function M.setup(opts)
     M.opts = opts or {}
 
     M.opts.timeout = opts.timeout or 3500
+    M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
 
     local ik = opts.issue_keys or {}
     M.opts.issue_keys = ik
@@ -51,11 +52,30 @@ function M.setup(opts)
     M.opts.gitlab = opts.gitlab or {}
     M.opts.gitlab.executable = opts.gitlab.executable or "glab"
 
-    M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
-
+    vim.api.nvim_create_user_command("GForgeViewIssue", M.view_issue, {})
     vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
     vim.api.nvim_create_user_command("GForgeOpenedIssues", M.list_opened_issues, {})
     vim.api.nvim_create_user_command("GForgeCreateIssue", M.create_issue, {})
+end
+
+function M.view_issue(args)
+    local ia = require("gitforge.issue_actions")
+    local log = require("gitforge.log")
+    if #args.args == 0 then
+        vim.ui.input({ prompt = "Enter Issue Number", }, function(input)
+            if input == nil then
+                log.ephemeral_info("Aborted input")
+                return
+            end
+            log.ephemeral_info("Showing issue " .. input)
+            local provider = require(M.opts.default_issue_provider):newIssue(input)
+            ia.view_issue(provider)
+        end)
+    else
+        log.ephemeral_info("Showing issue " .. args.args)
+        local provider = require(M.opts.default_issue_provider):newIssue(args.args)
+        ia.view_issue(provider)
+    end
 end
 
 function M.list_issues(args)
