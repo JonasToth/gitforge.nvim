@@ -49,6 +49,7 @@ return {
 Please call any of the following commands  to see if any issues are detected by the plugin:
 - `:checkhealth gitforge` to check the overall plugin health
 - `:checkhealth gitforge.gh` to check the Github provier
+- `:checkhealth gitforge.glab` to check the GitLab provier
 
 ## Usage
 
@@ -65,17 +66,23 @@ Please call any of the following commands  to see if any issues are detected by 
 Interacting with an issue buffer is done through key binding using the `<localleader>` key.
 Closing an issue is done with `q`. The key bindings are configurable as [documented here](/docs/configuration.md#issue-settings).
 
-|Issue-Action      | Default Binding    | Github | Gitlab |
-|-----------------:|:------------------:|:------:|:------:|
-| Hide Issue       | `q`                | [x]    | [x]    |
-| Refresh Content  | `<localleader>u`   | [x]    | [x]    |
-| Edit Title       | `<localleader>t`   | [x]    | [x]    |
-| Edit Labels      | `<localleader>l`   | [x]    | [x]    |
-| Edit Assignees   | `<localleader>a`   | [x]    | [x]    |
-| Edit Description | `<localleader>d`   | [x]    | [x]    |
-| Open/Close Issue | `<localleader>s`   | [x]    | [x]    |
-| Add comment      | `<localleader>c`   | [x]    | [x]    |
-| Open in Browser  | `<localleader>w`   | [x]    | [x]    |
+| Single Issue             | Default Binding                     | Github | Gitlab |
+|-------------------------:|:-----------------------------------:|:------:|:------:|
+| Create New Issue         | `:GForgeCreateIssue`                | ✓      | ✓      |
+| List All Issues          | `:GForgeListIssues`                 | ✓      | ✓      |
+| List Locally Open Issues | `:GForgeOpenedIssues`               | ✓      | ✓      |
+
+| Issue-Buffer Actions     | Default Binding                     | Github | Gitlab |
+|-------------------------:|:-----------------------------------:|:------:|:------:|
+| Hide Issue               | `q`                                 | ✓      | ✓      |
+| Refresh Content          | `<localleader>u`                    | ✓      | ✓      |
+| Edit Title               | `<localleader>t`                    | ✓      | ✓      |
+| Edit Labels              | `<localleader>l`                    | ✓      | ✓      |
+| Edit Assignees           | `<localleader>a`                    | ✓      | ✓      |
+| Edit Description         | `<localleader>d`                    | ✓      | ✓      |
+| Open/Close Issue         | `<localleader>s`                    | ✓      | ✓      |
+| Add comment              | `<localleader>c`                    | ✓      | ✓      |
+| Open in Browser          | `<localleader>w`                    | ✓      | ✓      |
 
 ### Configuration
 
@@ -110,18 +117,9 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
 
 ### Issues
 
-- [x] Github (using `gh` cli)
-    - [x] Listing Issues via `telescope.nvim`
-    - [x] Creating an issue
-    - [x] Editing a single issue
-    - [x] Commenting on an issue
-    - [x] Closing and Reopening an issue
-- [x] GitLab (using `glab` cli)
-    - [x] Listing Issues via `telescope.nvim`
-    - [x] Creating an issue
-    - [x] Editing a single issue
-    - [x] Commenting on an issue
-    - [x] Closing and Reopening an issue
+The issue interactions are ready to be tried out. Please create issues if you experience problems.
+Right now, only single-issue interactions are available. Switch to the Web-View directly from
+`nvim` if necessary.
 
 ### Pull Requests
 
