@@ -15,6 +15,7 @@
 ---@field cmd_view_web function
 ---@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
+---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
 local GHIssue = {}
 
@@ -230,8 +231,14 @@ function GHIssue:next_possible_states(current_state)
 end
 
 ---@param json_input string JSON encoded result of a command execution.
----@return GHIssue issue Transformed JSON to the expected interface of an issue.
+---@return Issue issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue(json_input)
+    return vim.fn.json_decode(json_input)
+end
+
+---@param json_input string JSON encoded result of a command execution.
+---@return Issue issue Transformed JSON to the expected interface of an issue.
+function GHIssue:convert_cmd_result_to_issue_list(json_input)
     return vim.fn.json_decode(json_input)
 end
 

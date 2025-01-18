@@ -6,11 +6,9 @@ require("gitforge.set")
 ---@class Author
 ---@field login string Username of the author.
 ---@field name string? Optional real name of the author.
----@field is_bot boolean Indicate if this is a bot account.
 
 ---@class Label
 ---@field name string human readable representation of the label
----@field color string HTML color of the label.
 
 ---@class Comment
 ---@field author Author Author of the comment.
@@ -42,7 +40,7 @@ local g_description_empty_md = "No Description"
 --- @return integer number of the buffer. Can be `0` if creation failed.
 function GenericIssue.render_issue_to_buffer(buf, issue)
     local log = require("gitforge.log")
-    log.trace_msg("Rendering Issue to buffer " .. buf)
+    log.trace_msg("Rendering Issue " .. issue.number .. " to buffer " .. buf)
     if issue == nil then
         return buf
     end

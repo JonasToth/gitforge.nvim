@@ -417,7 +417,7 @@ function IssueActions.list_issues(opts, provider)
             return
         end
         vim.schedule(function()
-            local data = prov:convert_cmd_result_to_issue(handle.stdout)
+            local data = prov:convert_cmd_result_to_issue_list(handle.stdout)
             create_telescope_picker_for_issue_list(data, prov)
         end)
     end

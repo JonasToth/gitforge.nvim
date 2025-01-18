@@ -68,9 +68,7 @@ function GLabIssue:edit_cmd()
 end
 
 function GLabIssue:cmd_fetch()
-    local required_fields =
-    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
-    local cmd = { self:cmd(), "issue", "view", self.issue_number, "--json", required_fields }
+    local cmd = { self:cmd(), "issue", "view", "--output", "json", "--comments", self.issue_number, }
     -- if opts.project then
     --     table.insert(cmd, "-R")
     --     table.insert(cmd, opts.project)
@@ -217,10 +215,95 @@ function GLabIssue:next_possible_states(current_state)
     end
 end
 
+---@return Author
+local conv_glab_author = function(glab_author)
+    return {
+        login = glab_author.username,
+        name = glab_author.name,
+    }
+end
+
+---@return Author[]
+local conv_glab_authors = function(glab_authors)
+    local result = {}
+    for _, a in pairs(glab_authors) do
+        table.insert(result, conv_glab_author(a))
+    end
+    return result
+end
+
+---@return Label
+local conv_glab_label = function(glab_label)
+    return {
+        name = glab_label,
+    }
+end
+
+---@return Label[]
+local conv_glab_labels = function(glab_labels)
+    local result = {}
+    for _, l in pairs(glab_labels) do
+        table.insert(result, conv_glab_label(l))
+    end
+    return result
+end
+
+---@return Comment
+local conv_glab_comment = function(glab_comment)
+    return {
+        author = conv_glab_author(glab_comment.author),
+        createdAt = glab_comment.created_at,
+        body = glab_comment.body,
+    }
+end
+
+---@return Comment[]
+local conv_glab_comments = function(glab_comments)
+    local result = {}
+    for _, c in pairs(glab_comments) do
+        table.insert(result, conv_glab_comment(c))
+    end
+    return result
+end
+
+---@return Issue
+local conv_glab_issue = function(glab_issue)
+    local has_comments = glab_issue.Notes ~= vim.NIL and glab_issue.Notes ~= nil
+    local has_closed_at = glab_issue.closed_at ~= vim.NIL
+    return {
+        body = glab_issue.description,
+        title = glab_issue.title,
+        author = conv_glab_author(glab_issue.author),
+        number = glab_issue.id,
+        createdAt = glab_issue.created_at,
+        closed = has_closed_at,
+        closedAt = has_closed_at and glab_issue.closed_at or nil,
+        state = glab_issue.state,
+        assignees = conv_glab_authors(glab_issue.assignees),
+        labels = conv_glab_labels(glab_issue.labels),
+        comments = has_comments and conv_glab_comments(glab_issue.Notes) or nil,
+    }
+end
+
+---@return Issue
+local conv_glab_issues = function(glab_issues)
+    local result = {}
+    for _, i in pairs(glab_issues) do
+        table.insert(result, conv_glab_issue(i))
+    end
+    return result
+end
+
 ---@param json_input string JSON encoded result of a command execution.
----@return GHIssue issue Transformed JSON to the expected interface of an issue.
+---@return Issue issue Transformed JSON to the expected interface of an issue.
 function GLabIssue:convert_cmd_result_to_issue(json_input)
-    return vim.fn.json_decode(json_input)
+    return conv_glab_issue(vim.fn.json_decode(json_input))
+end
+
+---@param json_input string JSON encoded result of a command execution.
+---@return Issue issue Transformed JSON to the expected interface of an issue.
+function GLabIssue:convert_cmd_result_to_issue_list(json_input)
+    return conv_glab_issues(vim.fn.json_decode(json_input))
 end
 
 return GLabIssue
