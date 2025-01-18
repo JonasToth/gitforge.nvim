@@ -8,12 +8,12 @@
 ---@field cmd_label_change function
 ---@field cmd_assignee_change function
 ---@field cmd_description_change function
+---@field next_possible_states function Compute next possible issue states from current state.
 ---@field cmd_state_change function
 ---@field cmd_comment function
 ---@field cmd_create_issue function
 ---@field cmd_list_issues function
 ---@field cmd_view_web function
----@field next_possible_states function Compute next possible issue states from current state.
 ---@field convert_cmd_result_to_issue function
 ---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
@@ -96,9 +96,10 @@ function GHIssue:cmd_label_change(new_labels, removed_labels)
     return gh_call
 end
 
----@param new_assignees Set
+---@param new Set unused
+---@param added_assignees Set
 ---@param removed_assignees Set
-function GHIssue:cmd_assignee_change(new_assignees, removed_assignees)
+function GHIssue:cmd_assignee_change(new, added_assignees, removed_assignees)
     local gh_call = self:edit_cmd()
 
     if not removed_assignees:empty() then
@@ -106,9 +107,9 @@ function GHIssue:cmd_assignee_change(new_assignees, removed_assignees)
         table.insert(gh_call, removed_assignees:toCSV())
     end
 
-    if not new_assignees:empty() then
+    if not added_assignees:empty() then
         table.insert(gh_call, "--add-assignee")
-        table.insert(gh_call, new_assignees:toCSV())
+        table.insert(gh_call, added_assignees:toCSV())
     end
     return gh_call
 end
@@ -127,6 +128,16 @@ function GHIssue:cmd_description_change(new_desc_file)
     table.insert(gh_call, "--body-file")
     table.insert(gh_call, new_desc_file)
     return gh_call
+end
+
+---@param current_state string Current state of the issue.
+---@return table|nil possible_state A list of possible new states.
+function GHIssue:next_possible_states(current_state)
+    if current_state == "OPEN" then
+        return { "CLOSED completed", "CLOSED not planned", current_state }
+    else
+        return { "REOPEN", current_state }
+    end
 end
 
 ---@param new_state string
@@ -218,16 +229,6 @@ end
 ---@return table command
 function GHIssue:cmd_view_web()
     return { self:cmd(), "issue", "view", "--web", self.issue_number }
-end
-
----@param current_state string Current state of the issue.
----@return table|nil possible_state A list of possible new states.
-function GHIssue:next_possible_states(current_state)
-    if current_state == "OPEN" then
-        return { "CLOSED completed", "CLOSED not planned", current_state }
-    else
-        return { "REOPEN", current_state }
-    end
 end
 
 ---@param json_input string JSON encoded result of a command execution.

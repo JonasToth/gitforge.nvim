@@ -121,7 +121,7 @@ local change_assignees = function(previous, new, provider)
 
     local prov = provider or require(require("gitforge").opts.default_issue_provider)
     require("gitforge.generic_ui").perform_issue_update_cmd(prov,
-        function(p) return p:cmd_assignee_change(added, removed) end)
+        function(p) return p:cmd_assignee_change(new, added, removed) end)
 end
 
 ---@param provider GHIssue|nil
@@ -261,7 +261,8 @@ function IssueActions.create_issue(provider)
         end
         local p = prov:handle_create_issue_output_to_view_issue(handle.stdout)
         if p == nil then
-            log.notify_change("Created the issue but failed to view it directly:\n" .. handle.stdout .. "\n" .. handle.stderr)
+            log.notify_change("Created the issue but failed to view it directly:\n" ..
+            handle.stdout .. "\n" .. handle.stderr)
             return
         end
         vim.schedule(function() IssueActions.view_issue(p) end)
