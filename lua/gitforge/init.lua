@@ -1,5 +1,9 @@
 local M = {}
 
+---@class Project
+---@field path string Filesystem path used to check for a prefix-match on. Passed into `vim.fs.normalize()` before matching.
+---@field issue_provider "gh"|"glab"
+
 ---@class GForgeIssueKeys
 ---Defines key binds for issue buffers.
 ---@field close string Key bind for closing the issue window/buffer.
@@ -20,19 +24,21 @@ local M = {}
 
 ---@class GForgeOptions
 ---Defines plugin options.
+---@field projects Project[] List of individual project configurations.
 ---@field timeout integer Milliseconds on how long to wait for command completion.
 ---@field issue_keys GForgeIssueKeys?
 ---@field github GForgeGithub?
 ---@field gitlab GForgeGitLab?
----@field default_issue_provider string Module name that provides issue content by default.
+---@field default_issue_provider "gh"|"glab" Default provider if no project match is found
 
 ---@param opts GForgeOptions
 function M.setup(opts)
     ---@type GForgeOptions
     M.opts = opts or {}
 
+    M.opts.projects = opts.projects or {}
     M.opts.timeout = opts.timeout or 3500
-    M.opts.default_issue_provider = opts.default_issue_provider or "gitforge.gh.issue"
+    M.opts.default_issue_provider = opts.default_issue_provider or "gh"
 
     local ik = opts.issue_keys or {}
     M.opts.issue_keys = ik
@@ -68,28 +74,28 @@ function M.view_issue(args)
                 return
             end
             log.ephemeral_info("Showing issue " .. input)
-            local provider = require("gitforge.issue_provider").get_default_provider():newIssue(input)
+            local provider = require("gitforge.issue_provider").get_from_cwd_or_default():newIssue(input)
             ia.view_issue(provider)
         end)
     else
         log.ephemeral_info("Showing issue " .. args.args)
-        local provider = require("gitforge.issue_provider").get_default_provider():newIssue(args.args)
+        local provider = require("gitforge.issue_provider").get_from_cwd_or_default():newIssue(args.args)
         ia.view_issue(provider)
     end
 end
 
 function M.list_issues(args)
-    local provider = require("gitforge.issue_provider").get_default_provider()
+    local provider = require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.issue_actions").list_issues({}, provider)
 end
 
 function M.list_opened_issues(args)
-    local provider = require("gitforge.issue_provider").get_default_provider()
+    local provider = require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.issue_actions").list_opened_issues(provider)
 end
 
 function M.create_issue(args)
-    local provider = require("gitforge.issue_provider").get_default_provider()
+    local provider = require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.issue_actions").create_issue(provider)
 end
 
