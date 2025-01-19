@@ -10,9 +10,9 @@ General settings that change the default experience:
 ```lua
 M.opts.timeout = 3500
 -- one of:
--- gitforge.gh.issue
--- gitforge.glab.issue
-M.opts.default_issue_provider = "gitforge.gh.issue"
+-- gh
+-- glab
+M.opts.default_issue_provider = "gh"
 ```
 
 ## Issue Settings

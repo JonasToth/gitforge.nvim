@@ -58,8 +58,23 @@ function IssueProvider.handle_create_issue_output_to_view_issue() return nil end
 
 local M = {}
 
+function M.get_from_cwd()
+    local cwd = vim.uv.cwd()
+    for _, config in ipairs(require("gitforge").opts.projects) do
+        if vim.startswith(cwd, vim.fs.normalize(config.path)) then
+            return require("gitforge." .. config.issue_provider .. ".issue")
+        end
+    end
+    return nil
+end
+
+function M.get_from_cwd_or_default()
+    return M.get_from_cwd() or M.get_default_provider()
+end
+
 function M.get_default_provider()
-    return require(require("gitforge").opts.default_issue_provider)
+    local prov_mod = require("gitforge").opts.default_issue_provider
+    return require("gitforge." .. prov_mod .. ".issue")
 end
 
 return M

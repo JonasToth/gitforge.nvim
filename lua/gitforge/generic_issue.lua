@@ -126,7 +126,7 @@ end
 ---Additionally, set buffer key mappings for user interface.
 ---@param provider IssueProvider|nil
 function GenericIssue.set_issue_buffer_options(provider)
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     vim.api.nvim_set_option_value('readonly', true, { buf = prov.buf })
     vim.api.nvim_set_option_value('buftype', 'nowrite', { buf = prov.buf })

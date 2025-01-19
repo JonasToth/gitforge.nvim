@@ -76,7 +76,7 @@ end
 ---@return vim.SystemObj|nil
 function GenericUI.refresh_issue(provider, completion)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local command = prov:cmd_fetch()
 
@@ -111,7 +111,7 @@ end
 ---@param command_generator function Generate the command to execute.
 function GenericUI.perform_issue_update_cmd(provider, command_generator)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local command = command_generator(prov)
     if command == nil then

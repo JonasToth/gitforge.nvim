@@ -11,7 +11,7 @@ local IssueActions = {}
 function IssueActions.comment_on_issue(provider)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local comment_buf = vim.api.nvim_create_buf(false, false)
     if comment_buf == 0 then
@@ -44,7 +44,7 @@ local change_title = function(title_input, provider)
     if #title_input == 0 then
         require("gitforge.log").notify_failure("An empty title is not allowed")
     end
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.generic_ui").perform_issue_update_cmd(prov,
         function(p) return p:cmd_title_change(title_input) end)
 end
@@ -52,7 +52,7 @@ end
 ---@param provider IssueProvider|nil
 function IssueActions.change_issue_title(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Change Title")
     local curr_buf_content = vim.api.nvim_buf_get_lines(prov.buf, 0, 1, false)
@@ -84,14 +84,14 @@ local change_labels = function(previous, new, provider)
         require("gitforge.log").ephemeral_info("Labels did not change.")
         return
     end
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.generic_ui").perform_issue_update_cmd(prov,
         function(p) return p:cmd_label_change(added, removed) end)
 end
 
 ---@param provider IssueProvider|nil
 function IssueActions.change_issue_labels(provider)
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(prov.buf)
     if previous_labels == nil then
@@ -119,14 +119,14 @@ local change_assignees = function(previous, new, provider)
         return
     end
 
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.generic_ui").perform_issue_update_cmd(prov,
         function(p) return p:cmd_assignee_change(new, added, removed) end)
 end
 
 ---@param provider IssueProvider|nil
 function IssueActions.change_issue_assignees(provider)
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(prov.buf)
     if previous_assignees == nil then
@@ -150,7 +150,7 @@ function IssueActions.change_issue_description(provider)
     local log = require("gitforge.log")
     local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Edit Issue Description")
     local issue_number = prov.issue_number
@@ -197,7 +197,7 @@ end
 ---@param provider IssueProvider|nil
 function IssueActions.change_issue_state(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Edit State - Open/Close")
     local issue_status = require("gitforge.generic_issue").get_status_from_issue_buffer(prov.buf)
@@ -224,7 +224,7 @@ end
 function IssueActions.view_issue(provider)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     prov.buf = generic_ui.find_existing_issue_buffer(prov.issue_number)
     if prov.buf == 0 then
@@ -245,7 +245,7 @@ end
 --       Right now it needs to be done by editing the new issue.
 function IssueActions.create_issue(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local title
     local description_file
@@ -307,7 +307,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
 
     local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     pickers.new(opts, {
         prompt_title = "Issue List",
@@ -410,7 +410,7 @@ end
 ---@param provider IssueProvider|nil
 function IssueActions.list_issues(opts, provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local open_telescope_list = function(handle)
         if handle.code ~= 0 then
@@ -503,7 +503,7 @@ function IssueActions.list_opened_issues(provider)
                         return
                     end
                     actions.close(prompt_bufnr)
-                    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+                    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
                     local p = prov:newIssue(selection.value.issue_number)
                     IssueActions.view_issue(p)
                 end)
@@ -516,7 +516,7 @@ end
 ---@param provider IssueProvider|nil
 function IssueActions.view_issue_web(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_default_provider()
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.notify_change("Opening browser for issue " .. prov.issue_number)
     local webview_completer = function(handle)
