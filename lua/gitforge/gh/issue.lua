@@ -1,5 +1,4 @@
----Provides executable calls to manipulate and view issues on Github.
----@class GHIssue
+---@class GHIssue:IssueProvider
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -18,6 +17,9 @@
 ---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
 local GHIssue = {}
+
+require("gitforge.issue_provider")
+setmetatable(GHIssue, { __index = IssueProvider })
 
 function GHIssue:new(buf)
     local s = setmetatable({}, { __index = GHIssue })
@@ -238,7 +240,7 @@ function GHIssue:convert_cmd_result_to_issue(json_input)
 end
 
 ---@param json_input string JSON encoded result of a command execution.
----@return Issue issue Transformed JSON to the expected interface of an issue.
+---@return Issue[] issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue_list(json_input)
     return vim.fn.json_decode(json_input)
 end

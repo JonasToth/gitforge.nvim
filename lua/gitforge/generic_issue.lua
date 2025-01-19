@@ -124,9 +124,9 @@ end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
----@param provider GHIssue|nil
+---@param provider IssueProvider|nil
 function GenericIssue.set_issue_buffer_options(provider)
-    local prov = provider or require(require("gitforge").opts.default_issue_provider)
+    local prov = provider or require("gitforge.issue_provider").get_default_provider()
 
     vim.api.nvim_set_option_value('readonly', true, { buf = prov.buf })
     vim.api.nvim_set_option_value('buftype', 'nowrite', { buf = prov.buf })

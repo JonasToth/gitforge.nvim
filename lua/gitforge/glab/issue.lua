@@ -1,5 +1,5 @@
 ---Provides executable calls to manipulate and view issues on Github.
----@class GLabIssue
+---@class GLabIssue:IssueProvider
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -18,6 +18,9 @@
 ---@field handle_create_issue_output_to_view_issue function
 local GLabIssue = {}
 
+require("gitforge.issue_provider")
+setmetatable(GLabIssue, { __index = IssueProvider })
+
 function GLabIssue:new(buf)
     local s = setmetatable({}, { __index = GLabIssue })
     s.buf = buf
@@ -33,7 +36,7 @@ function GLabIssue:newIssue(issue_number)
 end
 
 ---@param issue_link string URL to the issue
----@return GHIssue|nil
+---@return GLabIssue|nil
 function GLabIssue:newFromLink(issue_link)
     local log = require("gitforge.log")
 
@@ -166,7 +169,7 @@ end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
 ---                     the issue id and return a provider for that issue.
----@return GHIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
+---@return GLabIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
 function GLabIssue:handle_create_issue_output_to_view_issue(output)
     local log = require("gitforge.log")
 
@@ -310,7 +313,7 @@ function GLabIssue:convert_cmd_result_to_issue(json_input)
 end
 
 ---@param json_input string JSON encoded result of a command execution.
----@return Issue issue Transformed JSON to the expected interface of an issue.
+---@return Issue[] issue Transformed JSON to the expected interface of an issue.
 function GLabIssue:convert_cmd_result_to_issue_list(json_input)
     return conv_glab_issues(vim.fn.json_decode(json_input))
 end

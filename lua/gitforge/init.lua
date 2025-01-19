@@ -68,28 +68,28 @@ function M.view_issue(args)
                 return
             end
             log.ephemeral_info("Showing issue " .. input)
-            local provider = require(M.opts.default_issue_provider):newIssue(input)
+            local provider = require("gitforge.issue_provider").get_default_provider():newIssue(input)
             ia.view_issue(provider)
         end)
     else
         log.ephemeral_info("Showing issue " .. args.args)
-        local provider = require(M.opts.default_issue_provider):newIssue(args.args)
+        local provider = require("gitforge.issue_provider").get_default_provider():newIssue(args.args)
         ia.view_issue(provider)
     end
 end
 
 function M.list_issues(args)
-    local provider = require(M.opts.default_issue_provider)
+    local provider = require("gitforge.issue_provider").get_default_provider()
     require("gitforge.issue_actions").list_issues({}, provider)
 end
 
 function M.list_opened_issues(args)
-    local provider = require(M.opts.default_issue_provider)
+    local provider = require("gitforge.issue_provider").get_default_provider()
     require("gitforge.issue_actions").list_opened_issues(provider)
 end
 
 function M.create_issue(args)
-    local provider = require(M.opts.default_issue_provider)
+    local provider = require("gitforge.issue_provider").get_default_provider()
     require("gitforge.issue_actions").create_issue(provider)
 end
 

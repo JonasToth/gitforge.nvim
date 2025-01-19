@@ -71,12 +71,12 @@ function GenericUI.find_existing_issue_buffer(issue_number)
     return 0
 end
 
----@param provider GHIssue|nil
+---@param provider IssueProvider|nil
 ---@param completion function|nil
 ---@return vim.SystemObj|nil
 function GenericUI.refresh_issue(provider, completion)
     local log = require("gitforge.log")
-    local prov = provider or require(require("gitforge").opts.default_issue_provider)
+    local prov = provider or require("gitforge.issue_provider").get_default_provider()
 
     local command = prov:cmd_fetch()
 
@@ -107,11 +107,11 @@ function GenericUI.refresh_issue(provider, completion)
 end
 
 ---Blocking call to update the issue on the git forge and update the local content.
----@param provider GHIssue|nil Implementation for command generation.
+---@param provider IssueProvider|nil Implementation for command generation.
 ---@param command_generator function Generate the command to execute.
 function GenericUI.perform_issue_update_cmd(provider, command_generator)
     local log = require("gitforge.log")
-    local prov = provider or require(require("gitforge").opts.default_issue_provider)
+    local prov = provider or require("gitforge.issue_provider").get_default_provider()
 
     local command = command_generator(prov)
     if command == nil then
