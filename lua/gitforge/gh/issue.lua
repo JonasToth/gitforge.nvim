@@ -3,6 +3,7 @@
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
+---@field project string|nil Project-Id of the issue
 ---@field cmd_fetch function
 ---@field cmd_label_change function
 ---@field cmd_assignee_change function
@@ -24,42 +25,71 @@ setmetatable(GHIssue, { __index = IssueProvider })
 function GHIssue:new(buf)
     local s = setmetatable({}, { __index = GHIssue })
     s.buf = buf
-    s.issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
+    s.project, s.issue_number = require("gitforge.generic_issue").get_issue_proj_and_id_from_buf(buf)
     return s
 end
 
-function GHIssue:newIssue(issue_number)
+function GHIssue:newIssue(issue_number, project)
     local s = setmetatable({}, { __index = GHIssue })
     s.buf = 0
     s.issue_number = issue_number
+    s.project = project
     return s
 end
 
----@param issue_link string URL to the issue
----@return GHIssue|nil
-function GHIssue:newFromLink(issue_link)
+---@param url string
+---@return string|nil project
+---@return string|nil issue_number
+local parse_github_url = function(url)
     local log = require("gitforge.log")
 
-    local url_elements = vim.split(issue_link, "/")
-    local id
-    for index, value in ipairs(url_elements) do
-        if index == 7 then
-            id = value
-            break
-        end
+    local url_elements = vim.split(url, "/")
+
+    if #url_elements ~= 7 then
+        log.notify_failure("Splitting url did not return the expected number of elements.")
+        log.trace_msg(vim.inspect(url_elements))
+        return nil, nil
     end
+
+    local orga = url_elements[4]
+    if orga == nil or #orga == 0 then
+        log.notify_failure("Failed to extract the organization")
+        log.trace_msg(vim.inspect(orga))
+        return nil, nil
+    end
+
+    local repo = url_elements[5]
+    if repo == nil or #repo == 0 then
+        log.notify_failure("Failed to extract the repository")
+        log.trace_msg(vim.inspect(repo))
+        return nil, nil
+    end
+
+    local project = orga .. "/" .. repo
+
+    local id = url_elements[7]
     if id == nil or #id == 0 then
         log.notify_failure("Failed to extract issue id from URL")
         log.trace_msg(vim.join(url_elements, " : "))
-        return nil
+        return nil, nil
     end
     local int_id = tonumber(id)
     if int_id == nil then
         log.notify_failure("Failed to parse id-string as int")
         log.trace_msg(id)
+        return nil, nil
+    end
+    return project, tostring(int_id)
+end
+
+---@param issue_link string URL to the issue
+---@return GHIssue|nil
+function GHIssue:newFromLink(issue_link)
+    local project, issue_number = parse_github_url(issue_link)
+    if project == nil or issue_number == nil then
         return nil
     end
-    return self:newIssue(tostring(int_id))
+    return self:newIssue(issue_number, project)
 end
 
 function GHIssue:cmd()
@@ -72,7 +102,7 @@ end
 
 function GHIssue:cmd_fetch()
     local required_fields =
-    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt"
+    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt,url"
     local gh_call = { self:cmd(), "issue", "view", self.issue_number, "--json", required_fields }
     -- if opts.project then
     --     table.insert(gh_call, "-R")
@@ -203,7 +233,7 @@ end
 ---@return table command
 function GHIssue:cmd_list_issues(opts)
     local required_fields =
-    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees"
+    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees,url"
     local gh_call = { self:cmd(), "issue", "list", "--state", "all", "--json", required_fields }
     if opts.state then
         table.insert(gh_call, "--state")
@@ -236,13 +266,24 @@ end
 ---@param json_input string JSON encoded result of a command execution.
 ---@return Issue issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue(json_input)
-    return vim.fn.json_decode(json_input)
+    local issue = vim.fn.json_decode(json_input)
+    local project, _ = parse_github_url(issue.url)
+    issue.project = project
+    return issue
 end
 
 ---@param json_input string JSON encoded result of a command execution.
 ---@return Issue[] issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue_list(json_input)
-    return vim.fn.json_decode(json_input)
+    local issue_list = vim.fn.json_decode(json_input)
+    local result = {}
+    for _, i in pairs(issue_list) do
+        local project, _ = parse_github_url(i.url)
+        local issue = vim.deepcopy(i)
+        issue.project = project
+        table.insert(result, issue)
+    end
+    return result
 end
 
 return GHIssue

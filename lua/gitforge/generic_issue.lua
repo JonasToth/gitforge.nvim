@@ -21,6 +21,7 @@ require("gitforge.set")
 ---@field body string Holds the description of the issue as markdown string.
 ---@field title string Title of the issue
 ---@field author Author|nil Optionally present author meta data.
+---@field project string|nil
 ---@field number string Issue-ID
 ---@field createdAt string ISO-8601 formatted UTC time of issue creation.
 ---@field closed boolean Signaling if the issue is closed.
@@ -163,13 +164,17 @@ end
 
 --- Parses the buffer name and tries to retrieve the issue number and project.
 ---@param buf number Buffer Id for the issue buffer
-function GenericIssue.get_issue_id_from_buf(buf)
+---@return string|nil project project-id of the issue
+---@return string|nil issue_number
+function GenericIssue.get_issue_proj_and_id_from_buf(buf)
     local buf_name = vim.api.nvim_buf_get_name(buf)
-    if string.find(buf_name, "[Issue]", 1, true) == nil then
-        return nil
+    if string.find(buf_name, require("gitforge.generic_ui").forge_issue_pattern, 1, true) == nil then
+        return nil, nil
     end
+    local split = vim.split(buf_name, " ")
+    local project = split[2]
     for nbr in buf_name:gmatch("#(%d+)") do
-        return nbr
+        return project, nbr
     end
 end
 

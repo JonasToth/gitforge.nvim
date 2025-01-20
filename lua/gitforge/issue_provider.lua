@@ -3,6 +3,7 @@
 ---@class IssueProvider
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
+---@field project string | nil Project Identifier
 ---@field new function Create a new issue for a buffer.
 ---@field newIssue function Create an issue from the issue number.
 ---@field newFromLink function Parse a web link and return an issue provider object.
@@ -22,39 +23,88 @@
 IssueProvider = {
     buf = -1,
     issue_number = nil,
+    project = nil,
 }
 
-function IssueProvider.new() return nil end
+function IssueProvider.new()
+    require("gitforge.log").notify_failure("'new' not implemented")
+    return nil
+end
 
-function IssueProvider.newIssue() return nil end
+function IssueProvider.newIssue()
+    require("gitforge.log").notify_failure("'newIssue' not implemented")
+    return nil
+end
 
-function IssueProvider.newFromLink() return nil end
+function IssueProvider.newFromLink()
+    require("gitforge.log").notify_failure("'newFromLink' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_fetch() return nil end
+function IssueProvider.cmd_fetch()
+    require("gitforge.log").notify_failure("'cmd_fetch' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_label_change() return nil end
+function IssueProvider.cmd_label_change()
+    require("gitforge.log").notify_failure("'cmd_label_change' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_assignee_change() return nil end
+function IssueProvider.cmd_assignee_change()
+    require("gitforge.log").notify_failure("'cmd_assignee_change' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_description_change() return nil end
+function IssueProvider.cmd_description_change()
+    require("gitforge.log").notify_failure("'cmd_description_change' not implemented")
+    return nil
+end
 
-function IssueProvider.next_possible_states() return nil end
+function IssueProvider.next_possible_states()
+    require("gitforge.log").notify_failure("'next_possible_states' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_state_change() return nil end
+function IssueProvider.cmd_state_change()
+    require("gitforge.log").notify_failure("'cmd_state_change' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_comment() return nil end
+function IssueProvider.cmd_comment()
+    require("gitforge.log").notify_failure("'cmd_comment' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_create_issue() return nil end
+function IssueProvider.cmd_create_issue()
+    require("gitforge.log").notify_failure("'cmd_create_issue' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_list_issues() return nil end
+function IssueProvider.cmd_list_issues()
+    require("gitforge.log").notify_failure("'cmd_list_issues' not implemented")
+    return nil
+end
 
-function IssueProvider.cmd_view_web() return nil end
+function IssueProvider.cmd_view_web()
+    require("gitforge.log").notify_failure("'cmd_view_web' not implemented")
+    return nil
+end
 
-function IssueProvider.convert_cmd_result_to_issue() return nil end
+function IssueProvider.convert_cmd_result_to_issue()
+    require("gitforge.log").notify_failure("'convert_cmd_result_to_issue' not implemented")
+    return nil
+end
 
-function IssueProvider.convert_cmd_result_to_issue_list() return nil end
+function IssueProvider.convert_cmd_result_to_issue_list()
+    require("gitforge.log").notify_failure("'convert_cmd_result_to_issue_list' not implemented")
+    return nil
+end
 
-function IssueProvider.handle_create_issue_output_to_view_issue() return nil end
+function IssueProvider.handle_create_issue_output_to_view_issue()
+    require("gitforge.log").notify_failure("'handle_create_issue_output_to_view_issue' not implemented")
+    return nil
+end
 
 local M = {}
 

@@ -226,7 +226,7 @@ function IssueActions.view_issue(provider)
     local generic_ui = require("gitforge.generic_ui")
     local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
-    prov.buf = generic_ui.find_existing_issue_buffer(prov.issue_number)
+    prov.buf = generic_ui.find_existing_issue_buffer(prov.project, prov.issue_number)
     if prov.buf == 0 then
         local handle = generic_ui.refresh_issue(prov, function(p)
             generic_ui.create_issue_window(p.buf)
@@ -262,7 +262,7 @@ function IssueActions.create_issue(provider)
         local p = prov:handle_create_issue_output_to_view_issue(handle.stdout)
         if p == nil then
             log.notify_change("Created the issue but failed to view it directly:\n" ..
-            handle.stdout .. "\n" .. handle.stderr)
+                handle.stdout .. "\n" .. handle.stderr)
             return
         end
         vim.schedule(function() IssueActions.view_issue(p) end)
@@ -315,6 +315,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
         finder = finders.new_table {
             results = issue_list_json,
             entry_maker = function(entry)
+                require("gitforge.log").trace_msg(entry)
                 local displayer = entry_display.create {
                     separator = " ",
                     -- hl_chars = { ["["] = "TelescopeBorder", ["]"] = "TelescopeBorder" },
@@ -356,6 +357,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     assignees = vim.fn.join(assignees, ","),
                     value = entry,
                     number = entry.number,
+                    project = entry.project,
                     labels = labels_str,
                     display = make_display,
                 }, {})
@@ -364,7 +366,8 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
         previewer = previewers.new_buffer_previewer({
             title = "Issue Preview",
             define_preview = function(self, entry)
-                local buf = generic_ui.find_existing_issue_buffer(entry.number)
+                require("gitforge.log").trace_msg("Searching for existing rendered buffers")
+                local buf = generic_ui.find_existing_issue_buffer(entry.project, entry.number)
 
                 -- The issue was not rendered before. Render it for the previewer, but also
                 -- cache the content in a buffer.
@@ -377,7 +380,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     -- Cache for snappy opening.
                     buf = generic_issue.render_issue_to_buffer(buf, entry.value)
                     local title_ui = generic_ui.issue_title_ui(entry.value)
-                    vim.api.nvim_buf_set_name(buf, title_ui)
+                    generic_ui.set_buf_title(buf, title_ui)
                     generic_issue.set_issue_buffer_options(prov:new(buf))
                 else
                     -- Display the previously rendered content for the issue. Comments will be
@@ -398,7 +401,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     return
                 end
                 actions.close(prompt_bufnr)
-                local p = prov:newIssue(selection.value.number)
+                local p = prov:newIssue(selection.value.number, selection.value.project)
                 IssueActions.view_issue(p)
             end)
             return true
@@ -454,11 +457,12 @@ function IssueActions.list_opened_issues(provider)
     local default_selection_idx = 1
     for _, bufnr in ipairs(bufnrs) do
         local bufname = vim.api.nvim_buf_get_name(bufnr)
-        local issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(bufnr)
+        local project, issue_number = require("gitforge.generic_issue").get_issue_proj_and_id_from_buf(bufnr)
         local element = {
             bufnr = bufnr,
             bufname = bufname,
             issue_number = issue_number,
+            project = project,
         }
         table.insert(buffers, element)
     end
@@ -504,7 +508,7 @@ function IssueActions.list_opened_issues(provider)
                     end
                     actions.close(prompt_bufnr)
                     local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-                    local p = prov:newIssue(selection.value.issue_number)
+                    local p = prov:newIssue(selection.value.issue_number, selection.value.project)
                     IssueActions.view_issue(p)
                 end)
                 return true
