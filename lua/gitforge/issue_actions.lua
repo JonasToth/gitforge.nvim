@@ -7,11 +7,10 @@ local IssueActions = {}
 ---@field labels string? CSV-separated list of labels
 ---@field assignee string? CSV-separated list of assignees
 
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.comment_on_issue(provider)
     local log = require("gitforge.log")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     local comment_buf = vim.api.nvim_create_buf(false, false)
     if comment_buf == 0 then
@@ -31,7 +30,7 @@ function IssueActions.comment_on_issue(provider)
             cleanup()
             return
         end
-        generic_ui.perform_issue_update_cmd(prov,
+        generic_ui.perform_issue_update_cmd(provider,
             function(p) return p:cmd_comment(comment_file) end)
         cleanup()
     end
@@ -39,23 +38,21 @@ function IssueActions.comment_on_issue(provider)
 end
 
 ---@param title_input string
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 local change_title = function(title_input, provider)
     if #title_input == 0 then
         require("gitforge.log").notify_failure("An empty title is not allowed")
     end
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-    require("gitforge.generic_ui").perform_issue_update_cmd(prov,
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
         function(p) return p:cmd_title_change(title_input) end)
 end
 
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.change_issue_title(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Change Title")
-    local curr_buf_content = vim.api.nvim_buf_get_lines(prov.buf, 0, 1, false)
+    local curr_buf_content = vim.api.nvim_buf_get_lines(provider.buf, 0, 1, false)
     local headline_markdown = curr_buf_content[1]
     -- strip markdown header 1
     local headline = vim.trim(headline_markdown:sub(3, -1))
@@ -69,7 +66,7 @@ function IssueActions.change_issue_title(provider)
                 log.ephemeral_info("Title did not change")
                 return
             end
-            change_title(input, prov)
+            change_title(input, provider)
         end)
 end
 
@@ -77,23 +74,20 @@ end
 ---comma separated list in @c new_labels
 ---@param previous Set previous labels
 ---@param new Set new labels
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 local change_labels = function(previous, new, provider)
     local added, removed = previous:deltaTo(new)
     if added:empty() and removed:empty() then
         require("gitforge.log").ephemeral_info("Labels did not change.")
         return
     end
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-    require("gitforge.generic_ui").perform_issue_update_cmd(prov,
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
         function(p) return p:cmd_label_change(added, removed) end)
 end
 
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.change_issue_labels(provider)
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-
-    local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(prov.buf)
+    local previous_labels = require("gitforge.generic_issue").get_labels_from_issue_buffer(provider.buf)
     if previous_labels == nil then
         return
     end
@@ -103,7 +97,7 @@ function IssueActions.change_issue_labels(provider)
                 require("gitforge.log").ephemeral_info("Aborted Issue Label Change")
                 return
             end
-            change_labels(previous_labels, Set:createFromCSVList(input), prov)
+            change_labels(previous_labels, Set:createFromCSVList(input), provider)
         end)
 end
 
@@ -111,7 +105,7 @@ end
 ---comma separated list in @c new_labels
 ---@param previous Set previous assignees
 ---@param new Set new assignees
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 local change_assignees = function(previous, new, provider)
     local added, removed = previous:deltaTo(new)
     if added:empty() and removed:empty() then
@@ -119,16 +113,13 @@ local change_assignees = function(previous, new, provider)
         return
     end
 
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-    require("gitforge.generic_ui").perform_issue_update_cmd(prov,
+    require("gitforge.generic_ui").perform_issue_update_cmd(provider,
         function(p) return p:cmd_assignee_change(new, added, removed) end)
 end
 
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.change_issue_assignees(provider)
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-
-    local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(prov.buf)
+    local previous_assignees = require("gitforge.generic_issue").get_assignee_from_issue_buffer(provider.buf)
     if previous_assignees == nil then
         return
     end
@@ -138,28 +129,21 @@ function IssueActions.change_issue_assignees(provider)
                 require("gitforge.log").ephemeral_info("Aborted Issue Assigning")
                 return
             end
-            change_assignees(previous_assignees, Set:createFromCSVList(input), prov)
+            change_assignees(previous_assignees, Set:createFromCSVList(input), provider)
         end)
 end
 
 ---Called on an issue buffer. Parses out the current issue description, opens a new windows
 ---with the previous description and allows editing it. After save-closing the window, the
 ---description is updated on the issue.
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.change_issue_description(provider)
     local log = require("gitforge.log")
     local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Edit Issue Description")
-    local issue_number = prov.issue_number
-    if issue_number == nil then
-        log.notify_failure("Failed to retrieve issue number")
-        return
-    end
-
-    local parsed_description = require("gitforge.generic_issue").get_description_from_issue_buffer(prov.buf)
+    local parsed_description = require("gitforge.generic_issue").get_description_from_issue_buffer(provider.buf)
     if parsed_description == nil then
         log.notify_failure("Failed to extract the description of the issue")
         return
@@ -184,7 +168,7 @@ function IssueActions.change_issue_description(provider)
         if new_desc == parsed_description then
             log.ephemeral_info("No update to the description occured.")
         else
-            generic_ui.perform_issue_update_cmd(prov,
+            generic_ui.perform_issue_update_cmd(provider,
                 function(p) return p:cmd_description_change(tmp_desc_file) end)
         end
     end
@@ -194,15 +178,14 @@ function IssueActions.change_issue_description(provider)
         cleanup)
 end
 
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function IssueActions.change_issue_state(provider)
     local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     log.trace_msg("Edit State - Open/Close")
-    local issue_status = require("gitforge.generic_issue").get_status_from_issue_buffer(prov.buf)
+    local issue_status = require("gitforge.generic_issue").get_status_from_issue_buffer(provider.buf)
 
-    local list_of_next_stati = prov:next_possible_states(issue_status)
+    local list_of_next_stati = provider:next_possible_states(issue_status)
     if list_of_next_stati == nil then
         log.notify_failure("Failed to determine possible next issue states")
         return
@@ -215,9 +198,24 @@ function IssueActions.change_issue_state(provider)
             end
             log.trace_msg("From " .. issue_status .. " to " .. choice)
 
-            require("gitforge.generic_ui").perform_issue_update_cmd(prov,
+            require("gitforge.generic_ui").perform_issue_update_cmd(provider,
                 function(p) return p:cmd_state_change(choice) end)
         end)
+end
+
+---@param provider IssueProvider
+function IssueActions.view_issue_web(provider)
+    local log = require("gitforge.log")
+
+    log.notify_change("Opening browser for issue " .. provider.issue_number)
+    local webview_completer = function(handle)
+        if handle.code ~= 0 then
+            log.notify_failure("Failed to open issue!\n" .. handle.stderr)
+            return
+        end
+    end
+    local handle = require("gitforge.utility").async_exec(provider:cmd_view_web(), webview_completer)
+    if handle then handle:wait() end
 end
 
 ---@param provider IssueProvider|nil
@@ -294,7 +292,7 @@ function IssueActions.create_issue(provider)
 end
 
 ---@param issue_list_json table<Issue>
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 local create_telescope_picker_for_issue_list = function(issue_list_json, provider)
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
@@ -307,7 +305,6 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
 
     local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
 
     pickers.new(opts, {
         prompt_title = "Issue List",
@@ -315,15 +312,14 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
         finder = finders.new_table {
             results = issue_list_json,
             entry_maker = function(entry)
-                require("gitforge.log").trace_msg(entry)
                 local displayer = entry_display.create {
                     separator = " ",
                     -- hl_chars = { ["["] = "TelescopeBorder", ["]"] = "TelescopeBorder" },
                     items = {
-                        { width = 7 },
-                        { width = 60 },
-                        { width = 10 },
-                        { remaining = true },
+                        { width = 7 },                                                  -- Issue number
+                        { width = require("gitforge").opts.list_max_title_length + 5 }, -- Issue title
+                        { width = 10 },                                                 -- Assignees
+                        { remaining = true },                                           -- Labels
                     },
                 }
 
@@ -381,7 +377,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     buf = generic_issue.render_issue_to_buffer(buf, entry.value)
                     local title_ui = generic_ui.issue_title_ui(entry.value)
                     generic_ui.set_buf_title(buf, title_ui)
-                    generic_issue.set_issue_buffer_options(prov:new(buf))
+                    generic_issue.set_issue_buffer_options(provider:new(buf))
                 else
                     -- Display the previously rendered content for the issue. Comments will be
                     -- present in this case.
@@ -401,7 +397,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
                     return
                 end
                 actions.close(prompt_bufnr)
-                local p = prov:newIssue(selection.value.number, selection.value.project)
+                local p = provider:newIssue(selection.value.number, selection.value.project)
                 IssueActions.view_issue(p)
             end)
             return true
@@ -515,25 +511,6 @@ function IssueActions.list_opened_issues(provider)
             end,
         })
         :find()
-end
-
----@param provider IssueProvider|nil
-function IssueActions.view_issue_web(provider)
-    local log = require("gitforge.log")
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-
-    log.notify_change("Opening browser for issue " .. prov.issue_number)
-    local webview_completer = function(handle)
-        if handle.code ~= 0 then
-            --TODO: Better error logging
-            vim.api.nvim_err_write(handle.stderr)
-            vim.api.nvim_err_write(handle.stdout)
-            log.notify_failure("Failed to open issue!")
-            return
-        end
-    end
-    local handle = require("gitforge.utility").async_exec(prov:cmd_view_web(), webview_completer)
-    if handle then handle:wait() end
 end
 
 return IssueActions

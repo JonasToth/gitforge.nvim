@@ -51,6 +51,12 @@ local parse_github_url = function(url)
         return nil, nil
     end
 
+    local host = url_elements[3]
+    if host == nil or #host == 0 then
+        log.notify_failure("Failed to extract the gitforge host")
+        log.trace_msg(vim.inspect(host))
+        return nil, nil
+    end
     local orga = url_elements[4]
     if orga == nil or #orga == 0 then
         log.notify_failure("Failed to extract the organization")
@@ -65,7 +71,7 @@ local parse_github_url = function(url)
         return nil, nil
     end
 
-    local project = orga .. "/" .. repo
+    local project = host .. "/" .. orga .. "/" .. repo
 
     local id = url_elements[7]
     if id == nil or #id == 0 then
@@ -96,19 +102,28 @@ function GHIssue:cmd()
     return require("gitforge").opts.github.executable
 end
 
+function GHIssue:issue_cmd()
+    local c = { self:cmd(), "issue", }
+    if self.project then
+        table.insert(c, "--repo")
+        table.insert(c, self.project)
+    end
+    return c
+end
+
 function GHIssue:edit_cmd()
-    return { self:cmd(), "issue", "edit", self.issue_number }
+    local c = self:issue_cmd()
+    table.insert(c, "edit")
+    table.insert(c, self.issue_number)
+    return c
 end
 
 function GHIssue:cmd_fetch()
     local required_fields =
     "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt,url"
-    local gh_call = { self:cmd(), "issue", "view", self.issue_number, "--json", required_fields }
-    -- if opts.project then
-    --     table.insert(gh_call, "-R")
-    --     table.insert(gh_call, opts.project)
-    -- end
-    return gh_call
+    local gh_call = self:issue_cmd()
+    table.insert(gh_call, { "view", self.issue_number, "--json", required_fields })
+    return vim.iter(gh_call):flatten(math.huge):totable()
 end
 
 ---@param new_labels Set
@@ -175,7 +190,7 @@ end
 ---@param new_state string
 ---@return table|nil Command
 function GHIssue:cmd_state_change(new_state)
-    local gh_call = { self:cmd(), "issue", }
+    local gh_call = self:issue_cmd()
     if new_state == "CLOSED completed" then
         table.insert(gh_call, "close")
         table.insert(gh_call, self.issue_number)
@@ -197,13 +212,17 @@ end
 
 ---@param comment_file string Path to temporary file to comment on
 function GHIssue:cmd_comment(comment_file)
-    return { self:cmd(), "issue", "comment", self.issue_number, "--body-file", comment_file }
+    local c = self:issue_cmd()
+    table.insert(c, { "comment", self.issue_number, "--body-file", comment_file })
+    return vim.iter(table):flatten(math.huge):totable()
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
 function GHIssue:cmd_create_issue(title, description_file)
-    return { self:cmd(), "issue", "create", "--title", title, "--body-file", description_file }
+    local c = self:issue_cmd()
+    table.insert(c, { "create", "--title", title, "--body-file", description_file })
+    return vim.iter(table):flatten(math.huge):totable()
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
@@ -234,13 +253,13 @@ end
 function GHIssue:cmd_list_issues(opts)
     local required_fields =
     "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees,url"
-    local gh_call = { self:cmd(), "issue", "list", "--state", "all", "--json", required_fields }
+    local gh_call = { self:issue_cmd(), "list", "--state", "all", "--json", required_fields }
     if opts.state then
         table.insert(gh_call, "--state")
         table.insert(gh_call, opts.state)
     end
     if opts.project then
-        table.insert(gh_call, "-R")
+        table.insert(gh_call, "--repo")
         table.insert(gh_call, opts.project)
     end
     if opts.limit then
@@ -255,12 +274,12 @@ function GHIssue:cmd_list_issues(opts)
         table.insert(gh_call, "--assignee")
         table.insert(gh_call, opts.assignee)
     end
-    return gh_call
+    return vim.iter(gh_call):flatten(math.huge):totable()
 end
 
 ---@return table command
 function GHIssue:cmd_view_web()
-    return { self:cmd(), "issue", "view", "--web", self.issue_number }
+    return vim.iter({ self:issue_cmd(), "view", "--web", self.issue_number }):flatten(math.huge):totable()
 end
 
 ---@param json_input string JSON encoded result of a command execution.

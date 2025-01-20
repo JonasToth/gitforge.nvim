@@ -51,6 +51,12 @@ local parse_gitlab_url = function(url)
         return nil, nil
     end
 
+    local host = url_elements[3]
+    if host == nil or #host == 0 then
+        log.notify_failure("Failed to extract the gitforge host")
+        log.trace_msg(vim.inspect(host))
+        return nil, nil
+    end
     local orga = url_elements[4]
     if orga == nil or #orga == 0 then
         log.notify_failure("Failed to extract the organization")
@@ -65,7 +71,7 @@ local parse_gitlab_url = function(url)
         return nil, nil
     end
 
-    local project = orga .. "/" .. repo
+    local project = host .. "/" .. orga .. "/" .. repo
 
     local id = url_elements[8]
     if id == nil or #id == 0 then
@@ -96,17 +102,26 @@ function GLabIssue:cmd()
     return require("gitforge").opts.gitlab.executable
 end
 
+function GLabIssue:issue_cmd()
+    local c = { self:cmd(), "issue", }
+    if self.project then
+        table.insert(c, "--repo")
+        table.insert(c, self.project)
+    end
+    return c
+end
+
 function GLabIssue:edit_cmd()
-    return { self:cmd(), "issue", "update", self.issue_number }
+    local c = self:issue_cmd()
+    table.insert(c, "update")
+    table.insert(c, self.issue_number)
+    return c
 end
 
 function GLabIssue:cmd_fetch()
-    local cmd = { self:cmd(), "issue", "view", "--output", "json", "--comments", self.issue_number, }
-    -- if opts.project then
-    --     table.insert(cmd, "-R")
-    --     table.insert(cmd, opts.project)
-    -- end
-    return cmd
+    local cmd = self:issue_cmd()
+    table.insert(cmd, { "view", "--output", "json", "--comments", self.issue_number, })
+    return vim.iter(cmd):flatten(math.huge):totable()
 end
 
 ---@param added_labels Set
@@ -173,7 +188,7 @@ end
 ---@param new_state string
 ---@return table|nil Command
 function GLabIssue:cmd_state_change(new_state)
-    local cmd = { self:cmd(), "issue", }
+    local cmd = self:issue_cmd()
     if new_state == "closed" then
         table.insert(cmd, "close")
         table.insert(cmd, self.issue_number)
@@ -188,17 +203,19 @@ end
 
 ---@param comment_file string Path to temporary file to comment on
 function GLabIssue:cmd_comment(comment_file)
-    return {
-        self:cmd(), "issue", "note", self.issue_number, "--message",
+    return vim.iter({
+        self:issue_cmd(), "note", self.issue_number, "--message",
         require("gitforge.utility").read_file_to_string(comment_file)
-    }
+    }):flatten(math.huge):totable()
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
 function GLabIssue:cmd_create_issue(title, description_file)
     local desc_str = require("gitforge.utility").read_file_to_string(description_file)
-    return { self:cmd(), "issue", "create", "--title", title, "--description", desc_str, "--yes" }
+    return vim.iter({
+        self:issue_cmd(), "create", "--title", title, "--description", desc_str, "--yes"
+    }):flatten(math.huge):totable()
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
@@ -227,7 +244,7 @@ end
 ---@param opts IssueListOpts
 ---@return table command
 function GLabIssue:cmd_list_issues(opts)
-    local cmd = { self:cmd(), "issue", "list", "--output", "json" }
+    local cmd = { self:issue_cmd(), "list", "--output", "json" }
     if opts.state == "open" then
         -- thats the default
     elseif opts.state == "closed" then
@@ -251,12 +268,12 @@ function GLabIssue:cmd_list_issues(opts)
         table.insert(cmd, "--assignee")
         table.insert(cmd, opts.assignee)
     end
-    return cmd
+    return vim.iter(cmd):flatten(math.huge):totable()
 end
 
 ---@return table command
 function GLabIssue:cmd_view_web()
-    return { self:cmd(), "issue", "view", "--web", self.issue_number }
+    return vim.iter({ self:issue_cmd(), "issue", "view", "--web", self.issue_number }):flatten(math.huge):totable()
 end
 
 ---@return Author
@@ -321,7 +338,7 @@ local conv_glab_issue = function(glab_issue)
         body = glab_issue.description,
         title = glab_issue.title,
         author = conv_glab_author(glab_issue.author),
-        number = glab_issue.id,
+        number = glab_issue.iid,
         project = project,
         createdAt = glab_issue.created_at,
         closed = has_closed_at,

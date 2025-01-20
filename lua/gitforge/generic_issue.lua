@@ -125,17 +125,15 @@ end
 
 ---Changes the buffer options for @c buf to be unchangeable by normal operations.
 ---Additionally, set buffer key mappings for user interface.
----@param provider IssueProvider|nil
+---@param provider IssueProvider
 function GenericIssue.set_issue_buffer_options(provider)
-    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-
-    vim.api.nvim_set_option_value('readonly', true, { buf = prov.buf })
-    vim.api.nvim_set_option_value('buftype', 'nowrite', { buf = prov.buf })
-    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = prov.buf })
-    vim.api.nvim_set_option_value('syntax', 'markdown', { buf = prov.buf })
+    vim.api.nvim_set_option_value('readonly', true, { buf = provider.buf })
+    vim.api.nvim_set_option_value('buftype', 'nowrite', { buf = provider.buf })
+    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = provider.buf })
+    vim.api.nvim_set_option_value('syntax', 'markdown', { buf = provider.buf })
 
     local key_opts_from_desc = function(description)
-        return { buffer = prov.buf, nowait = true, desc = description, silent = true }
+        return { buffer = provider.buf, nowait = true, desc = description, silent = true }
     end
     local keys = require("gitforge").opts.issue_keys
     vim.keymap.set("n", keys.close, ":close<CR>", key_opts_from_desc("Close Issue"))
