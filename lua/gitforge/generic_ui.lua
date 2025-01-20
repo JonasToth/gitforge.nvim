@@ -107,15 +107,30 @@ function GenericUI.refresh_issue(provider, completion)
             vim.schedule(function()
                 local generic_issue = require("gitforge.generic_issue")
                 local generic_ui = require("gitforge.generic_ui")
+                local util = require("gitforge.utility")
 
                 local issue = prov:convert_cmd_result_to_issue(handle.stdout)
                 log.trace_msg("update single issue in buf: " .. tostring(prov.buf))
-                provider.buf = generic_issue.render_issue_to_buffer(prov.buf, issue)
+                prov.buf = generic_issue.render_issue_to_buffer(prov.buf, issue)
 
                 local title_ui = generic_ui.issue_title_ui(issue)
                 generic_ui.set_buf_title(prov.buf, title_ui)
                 generic_issue.set_issue_buffer_options(prov)
-                log.ephemeral_info("Updated content for issue " .. prov.issue_number)
+
+                local persisted_issue_file = util.get_issue_data_file(prov)
+                if persisted_issue_file:exists(false) then
+                    local issue_content = util.buffer_to_string(prov.buf)
+                    local worked = persisted_issue_file:io_write(issue_content)
+                    if worked then
+                        log.ephemeral_info("Updated content for issue " ..
+                        prov.issue_number .. " and persisted it locally.")
+                    else
+                        log.ephemeral_info("Updated content for issue " ..
+                        prov.issue_number .. " but failed to persist it locally.")
+                    end
+                else
+                    log.ephemeral_info("Updated content for issue " .. prov.issue_number)
+                end
 
                 if completion ~= nil then
                     completion(prov)

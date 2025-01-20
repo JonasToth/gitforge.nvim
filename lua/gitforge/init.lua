@@ -15,6 +15,7 @@ local M = {}
 ---@field assignees string Key bind to change the labels.
 ---@field description string Key bind to change the description.
 ---@field state string Key bind to change the state.
+---@field pin string Key bind to store ('pin') the issue to local cache.
 ---@field webview string Key bind to open the issue in a browser.
 
 ---@class GForgeGithub
@@ -53,6 +54,7 @@ function M.setup(opts)
     M.opts.issue_keys.assignees = ik.assignees or "<localleader>a"
     M.opts.issue_keys.description = ik.description or "<localleader>d"
     M.opts.issue_keys.state = ik.state or "<localleader>s"
+    M.opts.issue_keys.pin = ik.pin or "<localleader>p"
     M.opts.issue_keys.webview = ik.webview or "<localleader>w"
 
     M.opts.github = opts.github or {}
@@ -64,6 +66,7 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("GForgeViewIssue", M.view_issue, {})
     vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
     vim.api.nvim_create_user_command("GForgeOpenedIssues", M.list_opened_issues, {})
+    vim.api.nvim_create_user_command("GForgePinnedIssues", M.list_pinned_issues, {})
     vim.api.nvim_create_user_command("GForgeCreateIssue", M.create_issue, {})
 end
 
@@ -95,6 +98,10 @@ end
 function M.list_opened_issues(args)
     local provider = require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.issue_actions").list_opened_issues(provider)
+end
+
+function M.list_pinned_issues(args)
+    require("gitforge.issue_actions").list_pinned_issues()
 end
 
 function M.create_issue(args)
