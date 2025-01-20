@@ -1,6 +1,6 @@
 local GenericUI = {
     ---Constant to identify issue buffers.
-    forge_issue_pattern = '[Issue] #'
+    forge_issue_pattern = "[Issue]"
 }
 
 local set_buffer_options_for_edit = function(buf)
@@ -24,6 +24,13 @@ function GenericUI.open_edit_window(buf)
     return win_split
 end
 
+---Sets the title of a buffer to a custom URI for this plugin.
+---@param buf integer Buffer-ID
+---@param new_title string New Title
+function GenericUI.set_buf_title(buf, new_title)
+    vim.api.nvim_buf_set_name(buf, "gitforge://" .. new_title)
+end
+
 ---Creates a floating window for @c buf with the title @c title_ui
 ---Creates an autocommand to close the floating window if it looses focus.
 ---@param buf number Buffer-ID to display in the window.
@@ -33,35 +40,46 @@ function GenericUI.create_issue_window(buf)
     }
     local win = vim.api.nvim_open_win(buf, true, win_options)
     if win == 0 then
-        require("gitforge.log").notify_failure("Failed to open float for issue")
+        require("gitforge.log").notify_failure("Failed to open window for issue")
         return
     end
     -- Switch to normal mode - Telescope selection leaves in insert mode?!
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "i", false)
 end
 
+local generate_issue_id = function(project, number)
+    local title_id = GenericUI.forge_issue_pattern
+    if project then
+        title_id = title_id .. " " .. project
+    end
+    title_id = title_id .. " #" .. tostring(number)
+    return title_id
+end
+
 --- Returns the standardized title of an issue.
---- @param issue_json Issue Table representation of the issue JSON.
+--- @param issue Issue Table representation of the issue JSON.
 --- @return string title concatenation of issue number and a shortened title.
-function GenericUI.issue_title_ui(issue_json)
+function GenericUI.issue_title_ui(issue)
     local length_threshold = 50
-    local shortened_title = string.sub(issue_json.title, 1, length_threshold)
-    local title_id = GenericUI.forge_issue_pattern .. tostring(issue_json.number)
-    local three_dots = #issue_json.title > length_threshold and "..." or ""
+    local shortened_title = string.sub(issue.title, 1, length_threshold)
+    local three_dots = #issue.title > length_threshold and "..." or ""
+    local title_id = generate_issue_id(issue.project, issue.number)
     return title_id .. " - " .. shortened_title .. three_dots
 end
 
 ---Finds an existing buffer that holds @c issue_number.
+---@param project string|nil
 ---@param issue_number string|nil
 ---@return integer buf_id if a matching buffer is found, otherwise @c 0
-function GenericUI.find_existing_issue_buffer(issue_number)
-    if issue_number == nil then
+function GenericUI.find_existing_issue_buffer(project, issue_number)
+    if issue_number == nil or project == nil then
         return 0
     end
-    local title_id = GenericUI.forge_issue_pattern .. issue_number
+    local title_id = generate_issue_id(project, issue_number)
     local all_bufs = vim.api.nvim_list_bufs()
+    require("gitforge.log").trace_msg("Looking for: " .. title_id)
 
-    for _, buf_id in pairs(all_bufs) do
+    for _, buf_id in ipairs(all_bufs) do
         local buf_name = vim.api.nvim_buf_get_name(buf_id)
         local found = string.find(buf_name, title_id, 1, true)
         if found ~= nil then
@@ -83,19 +101,19 @@ function GenericUI.refresh_issue(provider, completion)
     return require("gitforge.utility").async_exec(command,
         function(handle)
             if handle.code ~= 0 then
-                -- log.notify_failure("Failed to retrieve issue content")
-                print("Failed to retrieve issue content")
+                log.notify_failure("Failed to retrieve issue content")
                 return
             end
             vim.schedule(function()
                 local generic_issue = require("gitforge.generic_issue")
+                local generic_ui = require("gitforge.generic_ui")
 
                 local issue = prov:convert_cmd_result_to_issue(handle.stdout)
                 log.trace_msg("update single issue in buf: " .. tostring(prov.buf))
                 provider.buf = generic_issue.render_issue_to_buffer(prov.buf, issue)
 
-                local title_ui = require("gitforge.generic_ui").issue_title_ui(issue)
-                vim.api.nvim_buf_set_name(prov.buf, title_ui)
+                local title_ui = generic_ui.issue_title_ui(issue)
+                generic_ui.set_buf_title(prov.buf, title_ui)
                 generic_issue.set_issue_buffer_options(prov)
                 log.ephemeral_info("Updated content for issue " .. prov.issue_number)
 

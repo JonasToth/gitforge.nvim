@@ -4,6 +4,7 @@
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
+---@field project string|nil Project-ID of the issue.
 ---@field cmd_fetch function
 ---@field cmd_label_change function
 ---@field cmd_assignee_change function
@@ -24,42 +25,71 @@ setmetatable(GLabIssue, { __index = IssueProvider })
 function GLabIssue:new(buf)
     local s = setmetatable({}, { __index = GLabIssue })
     s.buf = buf
-    s.issue_number = require("gitforge.generic_issue").get_issue_id_from_buf(buf)
+    s.project, s.issue_number = require("gitforge.generic_issue").get_issue_proj_and_id_from_buf(buf)
     return s
 end
 
-function GLabIssue:newIssue(issue_number)
+function GLabIssue:newIssue(issue_number, project)
     local s = setmetatable({}, { __index = GLabIssue })
     s.buf = 0
     s.issue_number = issue_number
+    s.project = project
     return s
 end
 
----@param issue_link string URL to the issue
----@return GLabIssue|nil
-function GLabIssue:newFromLink(issue_link)
+---@param url string
+---@return string|nil project
+---@return string|nil issue_number
+local parse_gitlab_url = function(url)
     local log = require("gitforge.log")
 
-    local url_elements = vim.split(issue_link, "/")
-    local id
-    for index, value in ipairs(url_elements) do
-        if index == 8 then
-            id = value
-            break
-        end
+    local url_elements = vim.split(url, "/")
+
+    if #url_elements ~= 8 then
+        log.notify_failure("Splitting url did not return the expected number of elements.")
+        log.trace_msg(vim.inspect(url_elements))
+        return nil, nil
     end
+
+    local orga = url_elements[4]
+    if orga == nil or #orga == 0 then
+        log.notify_failure("Failed to extract the organization")
+        log.trace_msg(vim.inspect(orga))
+        return nil, nil
+    end
+
+    local repo = url_elements[5]
+    if repo == nil or #repo == 0 then
+        log.notify_failure("Failed to extract the repository")
+        log.trace_msg(vim.inspect(repo))
+        return nil, nil
+    end
+
+    local project = orga .. "/" .. repo
+
+    local id = url_elements[8]
     if id == nil or #id == 0 then
         log.notify_failure("Failed to extract issue id from URL")
         log.trace_msg(vim.join(url_elements, " : "))
-        return nil
+        return nil, nil
     end
     local int_id = tonumber(id)
     if int_id == nil then
         log.notify_failure("Failed to parse id-string as int")
         log.trace_msg(id)
+        return nil, nil
+    end
+    return project, tostring(int_id)
+end
+
+---@param issue_link string URL to the issue
+---@return GLabIssue|nil
+function GLabIssue:newFromLink(issue_link)
+    local project, issue_number = parse_gitlab_url(issue_link)
+    if project == nil or issue_number == nil then
         return nil
     end
-    return self:newIssue(tostring(int_id))
+    return self:newIssue(issue_number, project)
 end
 
 function GLabIssue:cmd()
@@ -101,8 +131,12 @@ end
 ---@param removed_assignees Set unused
 function GLabIssue:cmd_assignee_change(new, added_assignees, removed_assignees)
     local cmd = self:edit_cmd()
-    table.insert(cmd, "--assignee")
-    table.insert(cmd, new:toCSV())
+    if #new == 0 then
+        table.insert(cmd, "--unassign")
+    else
+        table.insert(cmd, "--assignee")
+        table.insert(cmd, new:toCSV())
+    end
     return cmd
 end
 
@@ -282,11 +316,13 @@ end
 local conv_glab_issue = function(glab_issue)
     local has_comments = glab_issue.Notes ~= vim.NIL and glab_issue.Notes ~= nil
     local has_closed_at = glab_issue.closed_at ~= vim.NIL
+    local project, _ = parse_gitlab_url(glab_issue.web_url)
     return {
         body = glab_issue.description,
         title = glab_issue.title,
         author = conv_glab_author(glab_issue.author),
         number = glab_issue.id,
+        project = project,
         createdAt = glab_issue.created_at,
         closed = has_closed_at,
         closedAt = has_closed_at and glab_issue.closed_at or nil,
@@ -294,10 +330,11 @@ local conv_glab_issue = function(glab_issue)
         assignees = conv_glab_authors(glab_issue.assignees),
         labels = conv_glab_labels(glab_issue.labels),
         comments = has_comments and conv_glab_comments(glab_issue.Notes) or nil,
+        url = glab_issue.web_url,
     }
 end
 
----@return Issue
+---@return Issue[]
 local conv_glab_issues = function(glab_issues)
     local result = {}
     for _, i in pairs(glab_issues) do

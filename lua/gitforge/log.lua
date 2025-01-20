@@ -20,9 +20,9 @@ function Log.ephemeral_info(info_msg)
 end
 
 ---Debug logging to trace the execution of the code. Off by default.
----@param msg string Debug trace message.
+---@param msg any Debug trace message.
 function Log.trace_msg(msg)
-    -- vim.schedule(function() vim.api.nvim_echo({ { msg } }, false, {}) end)
+    -- vim.schedule(function() print(vim.inspect(msg)) end)
 end
 
 ---@param command_table table<string> Command line call in string pieces to log
@@ -30,7 +30,7 @@ function Log.executed_command(command_table)
     if command_table == nil then
         vim.schedule(function() vim.api.nvim_err_writeln("Tries to log nil as command") end)
     else
-        vim.schedule(function() print(vim.inspect(command_table)) end)
+        Log.trace_msg(command_table)
     end
 end
 

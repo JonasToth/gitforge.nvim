@@ -3,6 +3,7 @@ local M = {}
 ---@class Project
 ---@field path string Filesystem path used to check for a prefix-match on. Passed into `vim.fs.normalize()` before matching.
 ---@field issue_provider "gh"|"glab"
+---@field project string Identifier of the project. E.g. "JonasToth/gitforge.nvim"
 
 ---@class GForgeIssueKeys
 ---Defines key binds for issue buffers.
