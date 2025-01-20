@@ -253,7 +253,7 @@ function GLabIssue:cmd_list_issues(opts)
         table.insert(cmd, "--all")
     end
     if opts.project then
-        table.insert(cmd, "-R")
+        table.insert(cmd, "--repo")
         table.insert(cmd, opts.project)
     end
     if opts.limit then
