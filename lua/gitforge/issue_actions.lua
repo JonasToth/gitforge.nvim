@@ -204,6 +204,21 @@ function IssueActions.change_issue_state(provider)
 end
 
 ---@param provider IssueProvider
+function IssueActions.toggle_pin_issue(provider)
+    local util = require("gitforge.utility")
+    local log = require("gitforge.log")
+
+    local issue_file = util.get_issue_data_file(provider)
+    if issue_file:exists(false) then
+        log.ephemeral_info("Removing " .. issue_file)
+        issue_file:unlink()
+    else
+        log.ephemeral_info("Writing " .. issue_file)
+        vim.cmd("write! " .. issue_file)
+    end
+end
+
+---@param provider IssueProvider
 function IssueActions.view_issue_web(provider)
     local log = require("gitforge.log")
 
@@ -504,6 +519,122 @@ function IssueActions.list_opened_issues(provider)
                     end
                     actions.close(prompt_bufnr)
                     local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
+                    local p = prov:newIssue(selection.value.issue_number, selection.value.project)
+                    IssueActions.view_issue(p)
+                end)
+                return true
+            end,
+        })
+        :find()
+end
+
+function IssueActions.list_pinned_issues()
+    local util = require("gitforge.utility")
+    local log = require("gitforge.log")
+
+    -- FIXME: This function is the biggest mess of this code-base right now.
+    --        - Extract good functions for utility and so on
+    --        - get common functionality for telescope pickers
+    --        - show the issue content in previewer, I failed to do so...
+
+    local plugin_data = util.get_plugin_data_dir()
+    if not util.dir_exists(plugin_data) then
+        log.ephemeral_info("Plugin data directory " .. plugin_data .. " does not exist, no pinned issues.")
+        return
+    end
+    local issues = {}
+    --- Maps a project to its provider.
+    local providers = {}
+
+    local get_headline_from_file = function(path)
+        local s = util.read_file_to_string(path)
+        if s == nil then
+            return nil
+        end
+        local idx_first_linebreak = string.find(s, "\n", 1, true)
+        if idx_first_linebreak == nil or idx_first_linebreak <= 3 then
+            return nil
+        end
+        return vim.trim(string.sub(s, 3, idx_first_linebreak))
+    end
+
+    for name, type in vim.fs.dir(plugin_data, { depth = 4 }) do
+        if type == "file" then
+            local el = vim.split(name, "/", { plain = true })
+            if #el == 4 then
+                local project = vim.fn.join({ el[1], el[2], el[3] }, "/")
+                local file_parts = vim.split(el[4], "%.")
+                if #file_parts == 2 then
+                    local id = file_parts[1]
+                    if id == "issue_provider" then
+                        providers[project] = file_parts[2]
+                    else
+                        local issue_path = vim.fs.joinpath(plugin_data, name)
+                        local headline = get_headline_from_file(issue_path)
+                        if headline ~= nil then
+                            table.insert(issues, {
+                                project = project,
+                                issue_number = id,
+                                filename = issue_path,
+                                headline = headline,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+
+    local ts = require("telescope")
+    local pickers = require("telescope.pickers")
+    local config = require("telescope.config").values
+    local finders = require("telescope.finders")
+    local previewers = require("telescope.previewers")
+    local actions = require("telescope.actions")
+    local make_entry = require("telescope.make_entry")
+    pickers
+        .new({}, {
+            prompt_title = "Issue Buffers",
+            finder = finders.new_table {
+                results = issues,
+                entry_maker = function(entry)
+                    -- local idx_start = string.find(entry.bufname, generic_ui.forge_issue_pattern, 1, true)
+                    -- if idx_start == nil then
+                    --     log.ephemeral_info("Failed to identify cache issue buffer")
+                    --     return nil
+                    -- end
+                    -- local buf_txt = string.sub(entry.bufname, idx_start)
+                    print(vim.inspect(entry))
+                    return make_entry.set_default_entry_mt({
+                        ordinal = entry.project .. ":" .. entry.issue_number .. ":" .. entry.headline,
+                        filename = entry.filename,
+                        issue_number = entry.issue_number,
+                        value = entry,
+                        display = entry.project .. " #" .. entry.issue_number .. " " .. entry.headline,
+                    }, {})
+                end,
+            },
+            -- previewer = require('telescope.config').values.cat_previewer,
+            -- previewer = previewers.cat({
+            --     title = "Pinned Issues Preview",
+            -- }),
+            sorter = config.generic_sorter({}),
+            attach_mappings = function(prompt_bufnr)
+                local state = require("telescope.actions.state")
+                actions.select_default:replace(function()
+                    local selection = state.get_selected_entry()
+                    if selection == nil then
+                        ts.utils.warn_no_selection("Missing Issue Selection")
+                        return
+                    end
+                    actions.close(prompt_bufnr)
+                    local provider_name = providers[selection.value.project]
+                    if provider_name == nil then
+                        log.notify_failure("Can not determine the issue provider to use")
+                        return
+                    end
+                    local prov = require("gitforge." .. provider_name .. ".issue")
                     local p = prov:newIssue(selection.value.issue_number, selection.value.project)
                     IssueActions.view_issue(p)
                 end)

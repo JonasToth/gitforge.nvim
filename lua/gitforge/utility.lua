@@ -5,7 +5,7 @@ local M = {}
 function M.read_file_to_string(path)
     local file = io.open(path, "rb") -- r read mode and b binary mode
     if not file then return nil end
-    local content = file:read "*a" -- *a or *all reads the whole file
+    local content = file:read("*a")  -- *a or *all reads the whole file
     file:close()
     return content
 end
@@ -38,6 +38,47 @@ function M.async_exec(command, completion_func)
     end
     log.executed_command(command)
     return vim.system(command, { text = true, timeout = require("gitforge").opts.timeout }, completion_func)
+end
+
+---@param path string
+function M.file_exists(path)
+    return require("pathlib").new(path):is_file(false)
+end
+
+---@param path string
+function M.dir_exists(path)
+    return require("pathlib").new(path):is_dir(false)
+end
+
+---@return string path Path to data dir of the plugin.
+function M.get_plugin_data_dir()
+    ---@diagnostic disable-next-line: param-type-mismatch
+    return vim.fs.normalize(vim.fs.joinpath(vim.fn.stdpath("data"), "gitforge"))
+end
+
+---@param provider IssueProvider
+function M.get_project_directory(provider)
+    ---@diagnostic disable-next-line: param-type-mismatch
+    return vim.fs.normalize(vim.fs.joinpath(M.get_plugin_data_dir(), provider.project))
+end
+
+---@param provider IssueProvider
+---@return string Path
+function M.create_and_get_data_dir(provider)
+    local Path = require("pathlib")
+    local dir = M.get_project_directory(provider)
+
+    local provider_file = Path.new(vim.fs.joinpath(dir, "issue_provider." .. provider.provider))
+    provider_file:touch(Path.permission("rw-r--r--"), true)
+
+    return dir
+end
+
+---@param provider IssueProvider
+---@return PathlibPath Path
+function M.get_issue_data_file(provider)
+    local proj_dir = M.create_and_get_data_dir(provider)
+    return require("pathlib").new(vim.fs.joinpath(proj_dir, provider.issue_number .. ".md"))
 end
 
 return M

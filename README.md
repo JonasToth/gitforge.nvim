@@ -22,12 +22,14 @@ return {
     "JonasToth/gitforge.nvim",
     dependencies = {
         { "nvim-telescope/telescope.nvim" },
+        { "pysan3/pathlib.nvim" },
     },
-    cmd = { "GForgeViewIssue", "GForgeListIssues", "GForgeOpenedIssues", "GForgeCreateIssue" },
+    cmd = { "GForgeViewIssue", "GForgeListIssues", "GForgeOpenedIssues", "GForgePinnedIssues", "GForgeCreateIssue" },
     keys = {
         { "<leader>gv", "<cmd>GForgeViewIssue<CR>",    desc = "View an issue" },
         { "<leader>gn", "<cmd>GForgeCreateIssue<CR>",  desc = "Create a new issue" },
-        { "<leader>gg", "<cmd>GForgeOpenedIssues<CR>", desc = "List opened issue" },
+        { "<leader>ggo", "<cmd>GForgeOpenedIssues<CR>", desc = "List opened issue" },
+        { "<leader>ggp", "<cmd>GForgePinnedIssues<CR>", desc = "List pinned issues" },
         {
             "<leader>gio", function() require(ia).list_issues({ state = "open", limit = 100, }) end,
             desc = "List All Open Issues"
@@ -77,6 +79,7 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | Create New Issue         | `:GForgeCreateIssue`    |   ✓    |   ✓    |
 | List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
 | List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
+| List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |
 
 | Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
 | -----------------------: | :---------------------: | :----: | :----: |
@@ -88,6 +91,7 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | Edit Description         | `<localleader>d`        |   ✓    |   ✓    |
 | Open/Close Issue         | `<localleader>s`        |   ✓    |   ✓    |
 | Add comment              | `<localleader>c`        |   ✓    |   ✓    |
+| Pin Issue                | `<localleader>p`        |   ✓    |   ✓    |
 | Open in Browser          | `<localleader>w`        |   ✓    |   ✓    |
 
 ### Configuration

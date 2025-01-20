@@ -1,4 +1,5 @@
 ---@class GHIssue:IssueProvider
+---@field provider "gh"
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -17,7 +18,9 @@
 ---@field convert_cmd_result_to_issue function
 ---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
-local GHIssue = {}
+local GHIssue = {
+    provider = "gh"
+}
 
 require("gitforge.issue_provider")
 setmetatable(GHIssue, { __index = IssueProvider })
@@ -214,7 +217,7 @@ end
 function GHIssue:cmd_comment(comment_file)
     local c = self:issue_cmd()
     table.insert(c, { "comment", self.issue_number, "--body-file", comment_file })
-    return vim.iter(table):flatten(math.huge):totable()
+    return vim.iter(c):flatten(math.huge):totable()
 end
 
 ---@param title string Title of new issue, must not be empty.
@@ -222,7 +225,7 @@ end
 function GHIssue:cmd_create_issue(title, description_file)
     local c = self:issue_cmd()
     table.insert(c, { "create", "--title", title, "--body-file", description_file })
-    return vim.iter(table):flatten(math.huge):totable()
+    return vim.iter(c):flatten(math.huge):totable()
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract

@@ -1,5 +1,6 @@
 ---Provides executable calls to manipulate and view issues on Github.
 ---@class GLabIssue:IssueProvider
+---@field provider "glab"
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -17,7 +18,9 @@
 ---@field cmd_view_web function
 ---@field convert_cmd_result_to_issue function
 ---@field handle_create_issue_output_to_view_issue function
-local GLabIssue = {}
+local GLabIssue = {
+    provider = "glab"
+}
 
 require("gitforge.issue_provider")
 setmetatable(GLabIssue, { __index = IssueProvider })

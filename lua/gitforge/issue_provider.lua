@@ -1,6 +1,7 @@
 ---Provides the abstract interface that must be implemented by issue providers.
 ---Returns nil for everything.
 ---@class IssueProvider
+---@field provider string Identity of the issue provider.
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
 ---@field project string | nil Project Identifier
@@ -24,6 +25,7 @@ IssueProvider = {
     buf = -1,
     issue_number = nil,
     project = nil,
+    provider = "unimplemented",
 }
 
 function IssueProvider.new()
