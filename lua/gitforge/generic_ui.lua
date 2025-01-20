@@ -60,11 +60,11 @@ end
 --- @param issue Issue Table representation of the issue JSON.
 --- @return string title concatenation of issue number and a shortened title.
 function GenericUI.issue_title_ui(issue)
-    local length_threshold = 50
-    local shortened_title = string.sub(issue.title, 1, length_threshold)
-    local three_dots = #issue.title > length_threshold and "..." or ""
-    local title_id = generate_issue_id(issue.project, issue.number)
-    return title_id .. " - " .. shortened_title .. three_dots
+    local length_threshold = require("gitforge").opts.list_max_title_length
+    local title = generate_issue_id(issue.project, issue.number) .. " - " .. issue.title
+    local three_dots = #title > length_threshold and "..." or ""
+    local shortened_title = string.sub(title, 1, length_threshold)
+    return shortened_title .. three_dots
 end
 
 ---Finds an existing buffer that holds @c issue_number.

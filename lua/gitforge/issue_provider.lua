@@ -112,7 +112,10 @@ function M.get_from_cwd()
     local cwd = vim.uv.cwd()
     for _, config in ipairs(require("gitforge").opts.projects) do
         if vim.startswith(cwd, vim.fs.normalize(config.path)) then
-            return require("gitforge." .. config.issue_provider .. ".issue")
+            require("gitforge.log").trace_msg("Found a matching config: " .. config.path)
+            local provider = require("gitforge." .. config.issue_provider .. ".issue")
+            provider.project = config.project
+            return provider
         end
     end
     return nil

@@ -3,7 +3,7 @@ local M = {}
 ---@class Project
 ---@field path string Filesystem path used to check for a prefix-match on. Passed into `vim.fs.normalize()` before matching.
 ---@field issue_provider "gh"|"glab"
----@field project string Identifier of the project. E.g. "JonasToth/gitforge.nvim"
+---@field project string? Identifier of the project. E.g. "JonasToth/gitforge.nvim"
 
 ---@class GForgeIssueKeys
 ---Defines key binds for issue buffers.
@@ -27,6 +27,7 @@ local M = {}
 ---Defines plugin options.
 ---@field projects Project[] List of individual project configurations.
 ---@field timeout integer Milliseconds on how long to wait for command completion.
+---@field list_max_title_length integer Number of characters to cut issue-titles of in list views.
 ---@field issue_keys GForgeIssueKeys?
 ---@field github GForgeGithub?
 ---@field gitlab GForgeGitLab?
@@ -39,6 +40,7 @@ function M.setup(opts)
 
     M.opts.projects = opts.projects or {}
     M.opts.timeout = opts.timeout or 3500
+    M.opts.list_max_title_length = opts.list_max_title_length or 60
     M.opts.default_issue_provider = opts.default_issue_provider or "gh"
 
     local ik = opts.issue_keys or {}
