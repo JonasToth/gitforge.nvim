@@ -10,6 +10,18 @@ function M.read_file_to_string(path)
     return content
 end
 
+function M.get_markdown_headline_from_file(path)
+    local s = M.read_file_to_string(path)
+    if s == nil then
+        return nil
+    end
+    local idx_first_linebreak = string.find(s, "\n", 1, true)
+    if idx_first_linebreak == nil or idx_first_linebreak <= 3 then
+        return nil
+    end
+    return vim.trim(string.sub(s, 3, idx_first_linebreak))
+end
+
 ---Creates a string from the buffer content of @p buf
 ---@param buf integer Buffer Id to get the content from.
 ---@return string content Concatenation with "\n" and final trimming of the buffer content.
@@ -78,7 +90,7 @@ end
 ---@return PathlibPath Path
 function M.get_issue_data_file(provider)
     local proj_dir = M.create_and_get_data_dir(provider)
-    return require("pathlib").new(vim.fs.joinpath(proj_dir, provider.issue_number .. ".md"))
+    return require("pathlib").new(vim.fs.joinpath(proj_dir, "issue_" .. provider.issue_number .. ".md"))
 end
 
 return M
