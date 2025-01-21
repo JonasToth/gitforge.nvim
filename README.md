@@ -1,13 +1,16 @@
 # gitforge.nvim - Issues, PRs, CI/CD
 
-This plugin aims to provide integrated access to various Git Forges for your daily development
-tasks - working with issues, working with PRs and checking CI/CD pipelines.
-Its goal is being a workhorse plugin that is reliable and stable.
+- list, comment and change issues on GitLab and Github
+- pin relevant issues for you and have them available without searching for them
 
 > [!WARNING]
 > This plugin is in an early development state. Things may not work, they are clumsy and may break
 > randomly after an update.
 > Please keep this in mind.
+
+This plugin aims to provide integrated access to various Git Forges for your daily development
+tasks - working with issues, working with PRs and checking CI/CD pipelines.
+Its goal is being a workhorse plugin that is reliable and stable.
 
 You can read more about the goals and development milestones under [development resources](development_resources/README.md).
 
@@ -122,7 +125,7 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
 
 ### General Capabilities
 
-- [ ] Project Specific configuration to use different backends for different repositories
+- [x] Project Specific configuration to use different backends for different repositories
 - [x] Proper Commands for more efficient lazy loading
 
 ### Issues
