@@ -528,63 +528,75 @@ function IssueActions.list_opened_issues(provider)
         :find()
 end
 
+---@param plugin_data string
+---@param name string
+local make_pinned_file = function(plugin_data, name, project, id)
+    local issue_path = vim.fs.joinpath(plugin_data, name)
+    local headline = require("gitforge.utility").get_markdown_headline_from_file(issue_path)
+    local issue_number = string.match(id, "issue_(.*)")
+    if headline ~= nil and issue_number ~= nil then
+        return {
+            project = project,
+            issue_number = issue_number,
+            filename = issue_path,
+            path = issue_path,
+            headline = headline,
+        }
+    end
+end
+
+---@return string|nil project
+---@return string|nil id
+---@return string|nil file_extension
+local project_id_from_path = function(name)
+    local elements = vim.split(name, "/", { plain = true })
+    if #elements > 2 then
+        local project = elements[1]
+        for i = 2, #elements - 1 do
+            project = project .. "/" .. elements[i]
+        end
+        local file_parts = vim.split(elements[#elements], "%.")
+        if #file_parts == 2 then
+            return project, file_parts[1], file_parts[2]
+        else
+            return nil, nil, nil
+        end
+    else
+        return nil, nil, nil
+    end
+end
+
 function IssueActions.list_pinned_issues()
     local util = require("gitforge.utility")
     local log = require("gitforge.log")
-
-    -- FIXME: This function is the biggest mess of this code-base right now.
-    --        - Extract good functions for utility and so on
-    --        - get common functionality for telescope pickers
-    --        - show the issue content in previewer, I failed to do so...
 
     local plugin_data = util.get_plugin_data_dir()
     if not util.dir_exists(plugin_data) then
         log.ephemeral_info("Plugin data directory " .. plugin_data .. " does not exist, no pinned issues.")
         return
     end
+    --- Array of all issues to show.
     local issues = {}
     --- Maps a project to its provider.
     local providers = {}
 
-    local get_headline_from_file = function(path)
-        local s = util.read_file_to_string(path)
-        if s == nil then
-            return nil
-        end
-        local idx_first_linebreak = string.find(s, "\n", 1, true)
-        if idx_first_linebreak == nil or idx_first_linebreak <= 3 then
-            return nil
-        end
-        return vim.trim(string.sub(s, 3, idx_first_linebreak))
-    end
-
     for name, type in vim.fs.dir(plugin_data, { depth = 4 }) do
         if type == "file" then
-            local el = vim.split(name, "/", { plain = true })
-            if #el == 4 then
-                local project = vim.fn.join({ el[1], el[2], el[3] }, "/")
-                local file_parts = vim.split(el[4], "%.")
-                if #file_parts == 2 then
-                    local id = file_parts[1]
-                    if id == "issue_provider" then
-                        providers[project] = file_parts[2]
-                    else
-                        local issue_path = vim.fs.joinpath(plugin_data, name)
-                        local headline = get_headline_from_file(issue_path)
-                        if headline ~= nil then
-                            table.insert(issues, {
-                                project = project,
-                                issue_number = id,
-                                filename = issue_path,
-                                headline = headline,
-                            })
-                        end
+            local project, id, file_extension = project_id_from_path(name)
+            if project and id and file_extension then
+                if id == "issue_provider" then
+                    providers[project] = file_extension
+                elseif string.match(id, "issue_.*") then
+                    local f = make_pinned_file(plugin_data, name, project, id)
+                    if f then
+                        table.insert(issues, f)
                     end
+                else
+                    -- Skip
                 end
             end
         end
     end
-
 
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
@@ -595,19 +607,13 @@ function IssueActions.list_pinned_issues()
     local make_entry = require("telescope.make_entry")
     pickers
         .new({}, {
-            prompt_title = "Issue Buffers",
+            prompt_title = "Pinned Issues",
             finder = finders.new_table {
                 results = issues,
                 entry_maker = function(entry)
-                    -- local idx_start = string.find(entry.bufname, generic_ui.forge_issue_pattern, 1, true)
-                    -- if idx_start == nil then
-                    --     log.ephemeral_info("Failed to identify cache issue buffer")
-                    --     return nil
-                    -- end
-                    -- local buf_txt = string.sub(entry.bufname, idx_start)
-                    print(vim.inspect(entry))
                     return make_entry.set_default_entry_mt({
                         ordinal = entry.project .. ":" .. entry.issue_number .. ":" .. entry.headline,
+                        path = entry.filename,
                         filename = entry.filename,
                         issue_number = entry.issue_number,
                         value = entry,
@@ -615,10 +621,7 @@ function IssueActions.list_pinned_issues()
                     }, {})
                 end,
             },
-            -- previewer = require('telescope.config').values.cat_previewer,
-            -- previewer = previewers.cat({
-            --     title = "Pinned Issues Preview",
-            -- }),
+            previewer = previewers.vim_buffer_cat.new({}),
             sorter = config.generic_sorter({}),
             attach_mappings = function(prompt_bufnr)
                 local state = require("telescope.actions.state")
@@ -638,6 +641,7 @@ function IssueActions.list_pinned_issues()
                     local p = prov:newIssue(selection.value.issue_number, selection.value.project)
                     IssueActions.view_issue(p)
                 end)
+                -- 'return true' means "use default mappings"
                 return true
             end,
         })
