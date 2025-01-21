@@ -1,4 +1,6 @@
-## unreleased
+# 0.1.0 - 2025-01-21
+
+This is the first tagged release. Have fun :)
 
 - fetch issue list and view it in telescope picker
 - viewing an issue and its comment
