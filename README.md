@@ -23,6 +23,7 @@ You can read more about the goals and development milestones under [development 
 local ia = "gitforge.issue_actions"
 return {
     "JonasToth/gitforge.nvim",
+    version = "*",
     dependencies = {
         { "nvim-telescope/telescope.nvim" },
         { "pysan3/pathlib.nvim" },
@@ -83,6 +84,7 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
 | List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
 | List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |
+
 
 | Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
 | -----------------------: | :---------------------: | :----: | :----: |
