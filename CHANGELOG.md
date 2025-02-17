@@ -1,4 +1,13 @@
-# 0.1.0 - 2025-01-21
+# CHANGELOG
+
+## [unreleased]
+
+- consistent telescope picker for different issue sources
+    - list of issues retrieved from repository
+    - opened issue buffers
+    - pinned issues
+
+## 0.1.0 - 2025-01-21
 
 This is the first tagged release. Have fun :)
 
