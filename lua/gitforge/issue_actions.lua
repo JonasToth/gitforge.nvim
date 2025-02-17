@@ -306,16 +306,68 @@ function IssueActions.create_issue(provider)
     vim.ui.input({ prompt = "Issue Title (esc or empty to abort): " }, continuation_after_title_prompt)
 end
 
+---Returns a function that creates a single entry for an issue in a telescope picker.
+---@param entry table containing 'number', 'title', 'assignees', 'labels'
+---@see issue_entry_maker
+---@return function LineDisplay Function that creates the format for a single telescope entry line.
+local issue_picker_line_display = function(entry)
+    local displayer = require("telescope.pickers.entry_display").create({
+        separator = " ",
+        items = {
+            { width = 7 },                                                  -- Issue number
+            { width = require("gitforge").opts.list_max_title_length + 5 }, -- Issue title
+            { width = 10 },                                                 -- Assignees
+            { remaining = true },                                           -- Labels
+        },
+    })
+    return displayer({
+        { "#" .. entry.number, "TelescopeResultsConstant" },
+        entry.title,
+        { entry.assignees,     "TelescopeResultsIdentifier" },
+        { entry.labels,        "TelescopeResultsSpecialComment" },
+    })
+end
+
+---Creates a single entry for an issue for telescope picker.
+---@param entry table JSON description of the issue.
+---@return table PickerEntry Telescope entry with custom search ordinal, display line and issue content.
+local issue_entry_maker = function(entry)
+    local issue_labels = {}
+    for _, label in ipairs(entry.labels) do
+        table.insert(issue_labels, label.name)
+    end
+    local assignees = {}
+    if #entry.assignees == 0 then
+        table.insert(assignees, "unassigned")
+    else
+        for _, v in ipairs(entry.assignees) do
+            table.insert(assignees, "@" .. v.login)
+        end
+    end
+    local labels_str = vim.fn.join(issue_labels, ",")
+    local assignee_str = vim.fn.join(assignees, ",")
+    local search_ordinal = entry.title ..
+        ":" .. tostring(entry.number) .. ":" .. labels_str .. ":" .. assignee_str
+    return require("telescope.make_entry").set_default_entry_mt({
+        ordinal = search_ordinal,
+        title = entry.title,
+        assignees = vim.fn.join(assignees, ","),
+        value = entry,
+        number = entry.number,
+        project = entry.project,
+        labels = labels_str,
+        display = issue_picker_line_display,
+    }, {})
+end
+
 ---@param issue_list_json table<Issue>
 ---@param provider IssueProvider
 local create_telescope_picker_for_issue_list = function(issue_list_json, provider)
     local ts = require("telescope")
     local pickers = require("telescope.pickers")
-    local entry_display = require("telescope.pickers.entry_display")
     local finders = require("telescope.finders")
     local config = require("telescope.config").values
     local previewers = require("telescope.previewers")
-    local make_entry = require("telescope.make_entry")
     local opts = {}
 
     local util = require("gitforge.utility")
@@ -326,53 +378,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
         -- Using the 'async_job' predefined finder does not work, as the json output is not well formatted for it.
         finder = finders.new_table {
             results = issue_list_json,
-            entry_maker = function(entry)
-                local displayer = entry_display.create {
-                    separator = " ",
-                    -- hl_chars = { ["["] = "TelescopeBorder", ["]"] = "TelescopeBorder" },
-                    items = {
-                        { width = 7 },                                                  -- Issue number
-                        { width = require("gitforge").opts.list_max_title_length + 5 }, -- Issue title
-                        { width = 10 },                                                 -- Assignees
-                        { remaining = true },                                           -- Labels
-                    },
-                }
-
-                local make_display = function(e)
-                    return displayer {
-                        { "#" .. e.number, "TelescopeResultsConstant" },
-                        e.title,
-                        { e.assignees,     "TelescopeResultsIdentifier" },
-                        { e.labels,        "TelescopeResultsSpecialComment" },
-                    }
-                end
-                local issue_labels = {}
-                for _, label in ipairs(entry.labels) do
-                    table.insert(issue_labels, label.name)
-                end
-                local assignees = {}
-                if #entry.assignees == 0 then
-                    table.insert(assignees, "unassigned")
-                else
-                    for _, v in ipairs(entry.assignees) do
-                        table.insert(assignees, "@" .. v.login)
-                    end
-                end
-                local labels_str = vim.fn.join(issue_labels, ",")
-                local assignee_str = vim.fn.join(assignees, ",")
-                local search_ordinal = entry.title ..
-                    ":" .. tostring(entry.number) .. ":" .. labels_str .. ":" .. assignee_str
-                return make_entry.set_default_entry_mt({
-                    ordinal = search_ordinal,
-                    title = entry.title,
-                    assignees = vim.fn.join(assignees, ","),
-                    value = entry,
-                    number = entry.number,
-                    project = entry.project,
-                    labels = labels_str,
-                    display = make_display,
-                }, {})
-            end,
+            entry_maker = issue_entry_maker,
         },
         previewer = previewers.new_buffer_previewer({
             title = "Issue Preview",
@@ -467,13 +473,18 @@ function IssueActions.list_opened_issues(provider)
     local buffers = {}
     local default_selection_idx = 1
     for _, bufnr in ipairs(bufnrs) do
+        local gi = require("gitforge.generic_issue")
         local bufname = vim.api.nvim_buf_get_name(bufnr)
-        local project, issue_number = require("gitforge.generic_issue").get_issue_proj_and_id_from_buf(bufnr)
+        local project, issue_number = gi.get_issue_proj_and_id_from_buf(bufnr)
+        local labels = gi.get_labels_from_issue_buffer(bufnr)
+        local assignee = gi.get_assignee_from_issue_buffer(bufnr)
         local element = {
             bufnr = bufnr,
             bufname = bufname,
             issue_number = issue_number,
             project = project,
+            labels = labels,
+            assignee = assignee,
         }
         table.insert(buffers, element)
     end
