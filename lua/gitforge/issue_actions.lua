@@ -314,6 +314,7 @@ local issue_picker_line_display = function(entry)
     local displayer = require("telescope.pickers.entry_display").create({
         separator = " ",
         items = {
+            entry.project and { width = 20 } or nil,
             { width = 7 },                                                  -- Issue number
             { width = require("gitforge").opts.list_max_title_length + 5 }, -- Issue title
             { width = 10 },                                                 -- Assignees
@@ -321,6 +322,8 @@ local issue_picker_line_display = function(entry)
         },
     })
     return displayer({
+        -- Return the last 20 characters of the project.
+        entry.project and { string.sub(entry.project, -20), "TelescopeResultsSpecialComment" } or nil,
         { "#" .. entry.number, "TelescopeResultsConstant" },
         entry.title,
         { entry.assignees,     "TelescopeResultsIdentifier" },
@@ -329,7 +332,7 @@ local issue_picker_line_display = function(entry)
 end
 
 ---Creates a single entry for an issue for telescope picker.
----@param entry table JSON description of the issue.
+---@param entry Issue JSON description of the issue.
 ---@return table PickerEntry Telescope entry with custom search ordinal, display line and issue content.
 local issue_entry_maker = function(entry)
     local issue_labels = {}
@@ -357,13 +360,35 @@ local issue_entry_maker = function(entry)
         project = entry.project,
         labels = labels_str,
         display = issue_picker_line_display,
+        bufnr = entry.bufnr or nil,
     }, {})
+end
+
+--- Performs issues viewing after an issue is selected in a telescope picker.
+---@param prompt_bufnr integer ID of telescope buffer.
+---@param provider IssueProvider Backend for the issue actions.
+---@return boolean true true in all cases.
+local issue_pick_mapping = function(prompt_bufnr, provider)
+    local ts = require("telescope")
+    local actions = require("telescope.actions")
+    local state = require("telescope.actions.state")
+    actions.select_default:replace(function()
+        local selection = state.get_selected_entry()
+        if selection == nil then
+            ts.utils.warn_no_selection "Missing Issue Selection"
+            return
+        end
+        actions.close(prompt_bufnr)
+        local p = provider:newIssue(selection.value.number, selection.value.project)
+        IssueActions.view_issue(p)
+    end)
+    -- 'return true' means "use default mappings"
+    return true
 end
 
 ---@param issue_list_json table<Issue>
 ---@param provider IssueProvider
 local create_telescope_picker_for_issue_list = function(issue_list_json, provider)
-    local ts = require("telescope")
     local pickers = require("telescope.pickers")
     local finders = require("telescope.finders")
     local config = require("telescope.config").values
@@ -408,21 +433,7 @@ local create_telescope_picker_for_issue_list = function(issue_list_json, provide
             end
         }),
         sorter = config.generic_sorter(opts),
-        attach_mappings = function(prompt_bufnr)
-            local actions = require("telescope.actions")
-            local state = require("telescope.actions.state")
-            actions.select_default:replace(function()
-                local selection = state.get_selected_entry()
-                if selection == nil then
-                    ts.utils.warn_no_selection "Missing Issue Selection"
-                    return
-                end
-                actions.close(prompt_bufnr)
-                local p = provider:newIssue(selection.value.number, selection.value.project)
-                IssueActions.view_issue(p)
-            end)
-            return true
-        end,
+        attach_mappings = function(prompt_bufnr) return issue_pick_mapping(prompt_bufnr, provider) end,
     }):find()
 end
 
@@ -446,18 +457,49 @@ function IssueActions.list_issues(opts, provider)
     if handle then handle:wait() end
 end
 
+---Parses the content of a buffer to reconstruct an issue object.
+---@param bufnr integer Buffer-ID where an issue was rendered to previously.
+---@return Issue|nil reconstructed_issue Proper issue object or nil on failure.
+local issue_from_buffer = function(bufnr)
+    local gi = require("gitforge.generic_issue")
+    local bufname = vim.api.nvim_buf_get_name(bufnr)
+    local project, issue_number = gi.get_issue_proj_and_id_from_buf(bufnr)
+    local title = gi.get_title_from_issue_buffer(bufnr)
+    if title == nil then
+        require("gitforge.log").notify_failure("Expected title not found in issue buffer " .. bufnr)
+        return nil
+    end
+    local labels_set = gi.get_labels_from_issue_buffer(bufnr)
+    local labels = {}
+    for label, _ in pairs((labels_set or { elements = {} }).elements) do
+        table.insert(labels, { name = label })
+    end
+
+    local assignees_set = gi.get_assignee_from_issue_buffer(bufnr)
+    local assignees = {}
+    for assignee, _ in pairs((assignees_set or { elements = {} }).elements) do
+        table.insert(assignees, { login = assignee })
+    end
+
+    local separator_idx = string.find(bufname, " - ", 1, true)
+    if separator_idx == nil then
+        require("gitforge.log").notify_failure("Expected title separator not found in issue buffer name")
+        return nil
+    end
+    return {
+        bufnr = bufnr,
+        bufname = bufname,
+        title = title,
+        assignees = assignees,
+        value = { number = issue_number, project = project },
+        number = issue_number,
+        project = project,
+        labels = labels,
+    }
+end
+
 ---@param provider IssueProvider|nil
 function IssueActions.list_opened_issues(provider)
-    local ts = require("telescope")
-    local pickers = require("telescope.pickers")
-    local config = require("telescope.config").values
-    local finders = require("telescope.finders")
-    local previewers = require("telescope.previewers")
-    local actions = require("telescope.actions")
-    local make_entry = require("telescope.make_entry")
-    local opts = {}
-
-    local util = require("gitforge.utility")
     local generic_ui = require("gitforge.generic_ui")
 
     local bufnrs = vim.tbl_filter(function(bufnr)
@@ -471,70 +513,31 @@ function IssueActions.list_opened_issues(provider)
     end
 
     local buffers = {}
-    local default_selection_idx = 1
     for _, bufnr in ipairs(bufnrs) do
-        local gi = require("gitforge.generic_issue")
-        local bufname = vim.api.nvim_buf_get_name(bufnr)
-        local project, issue_number = gi.get_issue_proj_and_id_from_buf(bufnr)
-        local labels = gi.get_labels_from_issue_buffer(bufnr)
-        local assignee = gi.get_assignee_from_issue_buffer(bufnr)
-        local element = {
-            bufnr = bufnr,
-            bufname = bufname,
-            issue_number = issue_number,
-            project = project,
-            labels = labels,
-            assignee = assignee,
-        }
-        table.insert(buffers, element)
+        local reconstructed_issue = issue_from_buffer(bufnr)
+        if reconstructed_issue ~= nil then
+            table.insert(buffers, reconstructed_issue)
+        end
     end
 
-    pickers
+    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
+    require("telescope.pickers")
         .new({}, {
             prompt_title = "Issue Buffers",
-            finder = finders.new_table {
+            finder = require("telescope.finders").new_table({
                 results = buffers,
-                entry_maker = function(entry)
-                    local idx_start = string.find(entry.bufname, generic_ui.forge_issue_pattern, 1, true)
-                    if idx_start == nil then
-                        require("gitforge.log").ephemeral_info("Failed to identify cache issue buffer")
-                        return nil
-                    end
-                    local buf_txt = string.sub(entry.bufname, idx_start)
-                    return make_entry.set_default_entry_mt({
-                        ordinal = entry.issue_number .. ':' .. entry.bufname,
-                        bufnr = entry.bufnr,
-                        bufname = entry.bufname,
-                        issue_number = entry.issue_number,
-                        value = entry,
-                        display = buf_txt,
-                    }, {})
-                end,
-            },
-            previewer = previewers.new_buffer_previewer({
+                entry_maker = issue_entry_maker,
+            }),
+            previewer = require("telescope.previewers").new_buffer_previewer({
                 title = "Issue Preview",
                 define_preview = function(self, entry)
                     vim.api.nvim_set_option_value('filetype', 'markdown', { buf = self.state.bufnr })
-                    util.copy_buffer(entry.bufnr, self.state.bufnr)
+                    require("gitforge.utility").copy_buffer(entry.bufnr, self.state.bufnr)
                 end,
             }),
-            sorter = config.generic_sorter(opts),
-            default_selection_index = default_selection_idx,
-            attach_mappings = function(prompt_bufnr)
-                local state = require("telescope.actions.state")
-                actions.select_default:replace(function()
-                    local selection = state.get_selected_entry()
-                    if selection == nil then
-                        ts.utils.warn_no_selection "Missing Issue Selection"
-                        return
-                    end
-                    actions.close(prompt_bufnr)
-                    local prov = provider or require("gitforge.issue_provider").get_from_cwd_or_default()
-                    local p = prov:newIssue(selection.value.issue_number, selection.value.project)
-                    IssueActions.view_issue(p)
-                end)
-                return true
-            end,
+            sorter = require("telescope.config").values.generic_sorter({}),
+            default_selection_index = 1,
+            attach_mappings = function(prompt_bufnr) return issue_pick_mapping(prompt_bufnr, prov) end,
         })
         :find()
 end
