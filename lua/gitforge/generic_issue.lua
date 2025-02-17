@@ -178,6 +178,25 @@ function GenericIssue.get_issue_proj_and_id_from_buf(buf)
     end
 end
 
+---Return the issue title from the buffer.
+---@param buf number Buffer-ID for issue.
+---@return string|nil title Title of the issue. @c nil if no H1-headline is found.
+function GenericIssue.get_title_from_issue_buffer(buf)
+    local log = require("gitforge.log")
+    local curr_buf_content = vim.api.nvim_buf_get_lines(buf, 0, 1, false)
+    local title_line = curr_buf_content[1]
+    if title_line == nil then
+        log.notify_failure("Failed to get first line from buffer " .. buf)
+        return nil
+    end
+    -- verify that the labels line is found
+    if title_line:sub(1, 2) ~= "# " then
+        log.notify_failure("Failed parse markdown headline H1 in buffer " .. buf)
+        return nil
+    end
+    return title_line:sub(3, -1)
+end
+
 ---Return the comma separated list of labels from the issue buffer @c buf if possible.
 ---@param buf number Buffer-ID for issue.
 ---@return Set|nil labels Set of extracted labels. @c nil if that failed.
@@ -187,7 +206,7 @@ function GenericIssue.get_labels_from_issue_buffer(buf)
     local label_line = curr_buf_content[1]
     if label_line == nil then
         log.notify_failure("Failed to get expected label line from buffer " .. buf)
-        return nil;
+        return nil
     end
     -- verify that the labels line is found
     if label_line:sub(1, 7) ~= "Labels:" then
@@ -216,7 +235,7 @@ function GenericIssue.get_status_from_issue_buffer(buf)
     return vim.trim(extracted_status)
 end
 
----Return the comma separated list of assignees from the issue buffer @c buf if possible.
+---Return a set of assignees parsed from the issue buffer.
 ---@param buf number Buffer-ID for Issue.
 ---@return Set|nil assignees A set of assignees or @c nil if extraction failed.
 function GenericIssue.get_assignee_from_issue_buffer(buf)
@@ -227,13 +246,13 @@ function GenericIssue.get_assignee_from_issue_buffer(buf)
         log.notify_failure("Failed to get assignee line from buffer " .. buf)
         return nil;
     end
-    -- verify that the labels line is found
+    -- verify that the assignees line is found
     if assignee_line:sub(1, 12) ~= "Assigned to:" then
         log.notify_failure("Found assignee line does not contain 'Assigned to:' at beginning of line, ERROR (line: " ..
             assignee_line .. ")")
         return nil
     end
-    -- extract all labels from the line
+    -- extract all assignees from the line
     local assignees = assignee_line:sub(14, -1)
     if assignees == "-" then
         return Set:new()
