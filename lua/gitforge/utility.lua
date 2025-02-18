@@ -10,16 +10,63 @@ function M.read_file_to_string(path)
     return content
 end
 
-function M.get_markdown_headline_from_file(path)
-    local s = M.read_file_to_string(path)
-    if s == nil then
-        return nil
-    end
-    local idx_first_linebreak = string.find(s, "\n", 1, true)
+---@param file_content string File content
+---@return string|nil Headline
+function M.get_markdown_headline_from_file(file_content)
+    local idx_first_linebreak = string.find(file_content, "\n", 1, true)
     if idx_first_linebreak == nil or idx_first_linebreak <= 3 then
         return nil
     end
-    return vim.trim(string.sub(s, 3, idx_first_linebreak))
+    return vim.trim(string.sub(file_content, 3, idx_first_linebreak))
+end
+
+---@param file_content string Markdown rendered issue string.
+---@return Label[]|nil Labels CSV string of labels.
+---@return Author[]|nil Assignees CSV string of assignees.
+function M.get_labels_and_assignees_from_file(file_content)
+    local idx_first_linebreak = string.find(file_content, "\n", 1, true)
+    if idx_first_linebreak == nil then
+        return nil, nil
+    end
+    local idx_first_h2 = string.find(file_content, "##", idx_first_linebreak, true)
+    if idx_first_h2 == nil then
+        return nil, nil
+    end
+
+    local meta_data = string.sub(file_content, idx_first_linebreak, idx_first_h2)
+    local labels = vim.trim(string.match(meta_data, "%cLabels: (.-)%c") or "")
+    if labels == "-" then
+        labels = ""
+    end
+    local assignees = vim.trim(string.match(meta_data, "%cAssigned to: (.-)%c") or "")
+    if assignees == "-" then
+        assignees = ""
+    end
+
+    require("gitforge.set")
+    return M.labels_from_set(Set:createFromCSVList(labels)), M.authors_from_set(Set:createFromCSVList(assignees))
+end
+
+---Create @c Author objects from the set of strings.
+---@param name_set Set Set of login names.
+---@return Author[] Authors Objects with 'login' name provided from the provided strings.
+function M.authors_from_set(name_set)
+    local assignees = {}
+    for assignee, _ in pairs(name_set.elements) do
+        table.insert(assignees, { login = assignee })
+    end
+    return assignees
+end
+
+---Create @c Label objects from the set of strings.
+---@param label_set Set label strings.
+---@return Label[] Label label objects constructs from strings.
+function M.labels_from_set(label_set)
+    local labels = {}
+    for label, _ in pairs(label_set.elements) do
+        table.insert(labels, { name = label })
+    end
+    return labels
 end
 
 ---Creates a string from the buffer content of @p buf
