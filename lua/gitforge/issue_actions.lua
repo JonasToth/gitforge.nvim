@@ -366,7 +366,8 @@ end
 
 --- Performs issues viewing after an issue is selected in a telescope picker.
 ---@param prompt_bufnr integer ID of telescope buffer.
----@param provider IssueProvider Backend for the issue actions.
+---@param provider IssueProvider|function Backend for the issue actions. Can be a function
+---                                       that takes the selection and returns the provider.
 ---@return boolean true true in all cases.
 local issue_pick_mapping = function(prompt_bufnr, provider)
     local ts = require("telescope")
@@ -379,7 +380,17 @@ local issue_pick_mapping = function(prompt_bufnr, provider)
             return
         end
         actions.close(prompt_bufnr)
-        local p = provider:newIssue(selection.value.number, selection.value.project)
+        local prov
+        if type(provider) == "function" then
+            prov = provider(selection)
+        else
+            prov = provider
+        end
+        if prov == nil then
+            require("gitforge.log").notify_failure("Can not determine the issue provider")
+            return
+        end
+        local p = prov:newIssue(selection.value.number, selection.value.project)
         IssueActions.view_issue(p)
     end)
     -- 'return true' means "use default mappings"
@@ -551,7 +562,7 @@ local make_pinned_file = function(plugin_data, name, project, id)
     if headline ~= nil and issue_number ~= nil then
         return {
             project = project,
-            issue_number = issue_number,
+            number = issue_number,
             filename = issue_path,
             path = issue_path,
             headline = headline,
@@ -612,12 +623,10 @@ function IssueActions.list_pinned_issues()
         end
     end
 
-    local ts = require("telescope")
     local pickers = require("telescope.pickers")
     local config = require("telescope.config").values
     local finders = require("telescope.finders")
     local previewers = require("telescope.previewers")
-    local actions = require("telescope.actions")
     local make_entry = require("telescope.make_entry")
     pickers
         .new({}, {
@@ -626,37 +635,23 @@ function IssueActions.list_pinned_issues()
                 results = issues,
                 entry_maker = function(entry)
                     return make_entry.set_default_entry_mt({
-                        ordinal = entry.project .. ":" .. entry.issue_number .. ":" .. entry.headline,
+                        ordinal = entry.project .. ":" .. entry.number .. ":" .. entry.headline,
                         path = entry.filename,
                         filename = entry.filename,
-                        issue_number = entry.issue_number,
+                        number = entry.number,
                         value = entry,
-                        display = entry.project .. " #" .. entry.issue_number .. " " .. entry.headline,
+                        display = entry.project .. " #" .. entry.number .. " " .. entry.headline,
                     }, {})
                 end,
             },
             previewer = previewers.vim_buffer_cat.new({}),
             sorter = config.generic_sorter({}),
             attach_mappings = function(prompt_bufnr)
-                local state = require("telescope.actions.state")
-                actions.select_default:replace(function()
-                    local selection = state.get_selected_entry()
-                    if selection == nil then
-                        ts.utils.warn_no_selection("Missing Issue Selection")
-                        return
-                    end
-                    actions.close(prompt_bufnr)
-                    local provider_name = providers[selection.value.project]
-                    if provider_name == nil then
-                        log.notify_failure("Can not determine the issue provider to use")
-                        return
-                    end
-                    local prov = require("gitforge." .. provider_name .. ".issue")
-                    local p = prov:newIssue(selection.value.issue_number, selection.value.project)
-                    IssueActions.view_issue(p)
+                return issue_pick_mapping(prompt_bufnr, function(selection)
+                    local provider_string = providers[selection.value.project]
+                    if provider_string == nil then return nil end
+                    return require("gitforge." .. provider_string .. ".issue")
                 end)
-                -- 'return true' means "use default mappings"
-                return true
             end,
         })
         :find()
