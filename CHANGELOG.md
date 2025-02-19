@@ -6,6 +6,7 @@
     - list of issues retrieved from repository
     - opened issue buffers
     - pinned issues
+- telescope picker to select the issue labels using multi-selection
 
 ## 0.1.0 - 2025-01-21
 

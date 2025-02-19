@@ -279,6 +279,10 @@ function GLabIssue:cmd_view_web()
     return vim.iter({ self:issue_cmd(), "issue", "view", "--web", self.issue_number }):flatten(math.huge):totable()
 end
 
+function GLabIssue:new_label_provider_from_self()
+    return require("gitforge.glab.label"):new(self.project)
+end
+
 ---@return Author
 local conv_glab_author = function(glab_author)
     return {

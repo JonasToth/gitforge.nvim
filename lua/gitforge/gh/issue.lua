@@ -285,6 +285,10 @@ function GHIssue:cmd_view_web()
     return vim.iter({ self:issue_cmd(), "view", "--web", self.issue_number }):flatten(math.huge):totable()
 end
 
+function GHIssue:new_label_provider_from_self()
+    return require("gitforge.gh.label"):new(self.project)
+end
+
 ---@param json_input string JSON encoded result of a command execution.
 ---@return Issue issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue(json_input)

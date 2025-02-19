@@ -4,7 +4,7 @@
 ---@field provider string Identity of the issue provider.
 ---@field buf integer Buffer-ID of the issue.
 ---@field issue_number string|nil Issue-ID of the issue.
----@field project string | nil Project Identifier
+---@field project string|nil Project Identifier
 ---@field new function Create a new issue for a buffer.
 ---@field newIssue function Create an issue from the issue number.
 ---@field newFromLink function Parse a web link and return an issue provider object.
@@ -18,6 +18,7 @@
 ---@field cmd_create_issue function
 ---@field cmd_list_issues function
 ---@field cmd_view_web function
+---@field new_label_provider_from_self function Create a matching label provider from self.
 ---@field convert_cmd_result_to_issue function
 ---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
@@ -90,6 +91,11 @@ end
 
 function IssueProvider.cmd_view_web()
     require("gitforge.log").notify_failure("'cmd_view_web' not implemented")
+    return nil
+end
+
+function IssueProvider.new_label_provider_from_self()
+    require("gitforge.log").notify_failure("'new_label_provider_from_self' not implemented")
     return nil
 end
 
