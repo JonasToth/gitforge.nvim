@@ -148,7 +148,7 @@ function GenericIssue.set_issue_buffer_options(provider)
         key_opts_from_desc("Comment on Issue"))
     vim.keymap.set("n", keys.title, function() ia.change_issue_title(provider) end,
         key_opts_from_desc("Change Title"))
-    vim.keymap.set("n", keys.labels, function() ia.change_issue_labels(provider) end,
+    vim.keymap.set("n", keys.labels, function() ia.pick_issue_labels(provider) end,
         key_opts_from_desc("Change Labels"))
     vim.keymap.set("n", keys.assignees, function() ia.change_issue_assignees(provider) end,
         key_opts_from_desc("Assign Issue"))
