@@ -74,6 +74,8 @@ Please call any of the following commands  to see if any issues are detected by 
 > ```
 > You can change your working directory in `nvim` with the `:cd path/to/new/directory` command.
 
+### Issue Buffers
+
 Interacting with an issue buffer is done through key binding using the `<localleader>` key.
 Closing an issue is done with `q`. The key bindings are configurable as [documented here](/docs/configuration.md#issue-settings).
 
@@ -84,7 +86,6 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
 | List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
 | List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |
-
 
 | Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
 | -----------------------: | :---------------------: | :----: | :----: |
@@ -98,6 +99,19 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | Add comment              | `<localleader>c`        |   ✓    |   ✓    |
 | Pin Issue                | `<localleader>p`        |   ✓    |   ✓    |
 | Open in Browser          | `<localleader>w`        |   ✓    |   ✓    |
+
+### Label Picker
+
+| Action                   | Binding            |
+| -----------------------: | :----------------: |
+| Toggle Label             | `<tab>`            |
+| Select Label + Confirm   | `<cr>`             |
+| Confirm Selection        | `<esc>`            |
+| Quit without changes     | `<C-c>`            |
+| Move to next label       | `<C-n>` / `<Down>` |
+| Move to previous label   | `<C-p>` / `<Up>`   |
+| Move page up             | `<C-u>`            |
+| Move page down           | `<C-d>`            |
 
 ### Configuration
 
