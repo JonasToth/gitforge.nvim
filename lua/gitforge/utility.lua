@@ -121,7 +121,7 @@ function M.get_project_directory(provider)
     return vim.fs.normalize(vim.fs.joinpath(M.get_plugin_data_dir(), provider.project))
 end
 
----@param provider IssueProvider
+---@param provider IssueProvider|LabelProvider
 ---@return string Path
 function M.create_and_get_data_dir(provider)
     local Path = require("pathlib")
@@ -138,6 +138,13 @@ end
 function M.get_issue_data_file(provider)
     local proj_dir = M.create_and_get_data_dir(provider)
     return require("pathlib").new(vim.fs.joinpath(proj_dir, "issue_" .. provider.issue_number .. ".md"))
+end
+
+---@param provider LabelProvider
+---@return PathlibPath Path to file containing cached project labels.
+function M.get_project_labels_file(provider)
+    local proj_dir = M.create_and_get_data_dir(provider)
+    return require("pathlib").new(vim.fs.joinpath(proj_dir, "labels.json"))
 end
 
 return M
