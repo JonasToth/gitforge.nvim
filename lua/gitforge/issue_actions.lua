@@ -103,6 +103,118 @@ local label_picker_display = function(entry)
     })
 end
 
+---@param provider LabelProvider
+---@param continuationFunction function|nil What action to perform after the labels are retrieved.
+local retrieve_labels = function(provider, continuationFunction)
+    --TODO: Hardcoded 1000 may become a configuration parameter.
+    local cmd = provider:cmd_list_labels(1000)
+    require("gitforge.utility").async_exec(cmd, function(handle)
+        local log = require("gitforge.log")
+        if handle.code ~= 0 then
+            log.notify_failure("Failed to retrieve labels")
+            return
+        end
+        local labels_file = require("gitforge.utility").get_project_labels_file(provider)
+        local success = labels_file:io_write(handle.stdout)
+        if not success then
+            log.notify_failure("Failed to cache labels in file " .. labels_file)
+        else
+            log.ephemeral_info("Updated chached labels in file " .. labels_file)
+        end
+        if continuationFunction ~= nil then
+            continuationFunction(handle)
+        end
+    end)
+end
+
+---@param label_json string string must contain valid json.
+---@param previous_labels Set set of labels already selected for the issue
+---@param provider IssueProvider performs the change of labels after picking.
+local labels_telescope_picker = function(label_json, previous_labels, provider)
+    if label_json == nil then
+        require("gitforge.log").notify_failure("Can not present labels picker, failed to retrieve labels.")
+        return
+    end
+    local label_list = vim.fn.json_decode(label_json)
+    local opts = require("telescope.themes").get_ivy({ layout_config = { prompt_position = "bottom" } })
+    opts["multi_icon"] = ""
+
+    require("gitforge.set")
+    -- NOTE: Required to perform pre-selection.
+    local startup_completed = false
+
+    require("telescope.pickers").new(opts, {
+        prompt_title = "Project Labels",
+        finder = require("telescope.finders").new_table({
+            results = label_list,
+            entry_maker = function(entry)
+                return require("telescope.make_entry").set_default_entry_mt({
+                    ordinal = entry.name .. ":" .. entry.description,
+                    display = label_picker_display,
+                    value = entry,
+                    name = entry.name,
+                    description = entry.description,
+                })
+            end,
+        }),
+        sorter = require("telescope.config").values.generic_sorter(opts),
+        attach_mappings = function(prompt_bufnr, map)
+            local actions = require("telescope.actions")
+            local perform_multiselect = function()
+                local state = require("telescope.actions.state")
+                local picker = state.get_current_picker(prompt_bufnr)
+
+                -- Table of all selected value (mark with <tab>)
+                local highlights = picker:get_multi_selection()
+
+                -- "Enter" selected value
+                local selected = state.get_selected_entry()
+                actions.close(prompt_bufnr)
+
+                require("gitforge.set")
+                local selected_labels = Set:new()
+
+                if selected ~= nil then
+                    selected_labels:add(selected.value.name)
+                end
+
+                for _, hl in ipairs(highlights) do
+                    selected_labels:add(hl.value.name)
+                end
+                change_labels(previous_labels, selected_labels, provider)
+            end
+            actions.select_default:replace(perform_multiselect)
+            map({ "i", "n" }, "<ESC>", actions.select_default, { desc = "Commit label selection" })
+            map({ "i", "n" }, "<CR>", actions.select_default, { desc = "Commit label selection" })
+            map({ "i", "n" }, "<Tab>", actions.toggle_selection, { desc = "Toggle label selection" })
+            map({ "i", "n" }, "<C-c>", actions.close, { desc = "Close without selection" })
+            map({ "i", "n" }, "<C-j>", actions.nop, { desc = "No newline joining" })
+            map({ "i", "n" }, "<C-n>", actions.move_selection_next, { desc = "Move down" })
+            map({ "i", "n" }, "<Down>", actions.move_selection_next, { desc = "Move down" })
+            map({ "i", "n" }, "<C-p>", actions.move_selection_previous, { desc = "Move up" })
+            map({ "i", "n" }, "<Up>", actions.move_selection_previous, { desc = "Move up" })
+            map({ "i", "n" }, "<C-u>", actions.results_scrolling_up, { desc = "Move page up" })
+            map({ "i", "n" }, "<C-d>", actions.results_scrolling_down, { desc = "Move page down" })
+            return false
+        end,
+        on_complete = {
+            function(picker)
+                if startup_completed then
+                    return
+                end
+                local i = 1
+                for entry in picker.manager:iter() do
+                    if previous_labels:contains(entry.value.name) then
+                        picker:add_selection(picker:get_row(i))
+                    end
+                    i = i + 1
+                end
+                startup_completed = true
+            end,
+        }
+    }):find()
+end
+
 ---Creates a telescope picker to select the labels of the issue.
 ---@param provider IssueProvider
 function IssueActions.pick_issue_labels(provider)
@@ -114,93 +226,18 @@ function IssueActions.pick_issue_labels(provider)
     end
 
     local labelProvider = provider:new_label_provider_from_self()
-    --TODO: Hardcoded 1000 may become a configuration parameter.
-    local cmd = labelProvider:cmd_list_labels(1000)
-
-    require("gitforge.utility").async_exec(cmd, function(handle)
-        if handle.code ~= 0 then
-            log.notify_failure("Failed to retrieve labels")
-            return
-        end
-        vim.schedule(function()
-            local label_list = vim.fn.json_decode(handle.stdout)
-            local opts = require("telescope.themes").get_ivy({ layout_config = { prompt_position = "bottom" } })
-            opts["multi_icon"] = ""
-
-            require("gitforge.set")
-            local startup_completed = false
-            require("telescope.pickers").new(opts, {
-                prompt_title = "Project Labels",
-                finder = require("telescope.finders").new_table({
-                    results = label_list,
-                    entry_maker = function(entry)
-                        return require("telescope.make_entry").set_default_entry_mt({
-                            ordinal = entry.name .. ":" .. entry.description,
-                            display = label_picker_display,
-                            value = entry,
-                            name = entry.name,
-                            description = entry.description,
-                        })
-                    end,
-                }),
-                sorter = require("telescope.config").values.generic_sorter(opts),
-                attach_mappings = function(prompt_bufnr, map)
-                    local actions = require("telescope.actions")
-                    local perform_multiselect = function()
-                        local state = require("telescope.actions.state")
-                        local picker = state.get_current_picker(prompt_bufnr)
-
-                        -- Table of all selected value (mark with <tab>)
-                        local highlights = picker:get_multi_selection()
-
-                        -- "Enter" selected value
-                        local selected = state.get_selected_entry()
-                        actions.close(prompt_bufnr)
-
-                        require("gitforge.set")
-                        local selected_labels = Set:new()
-
-                        if selected ~= nil then
-                            selected_labels:add(selected.value.name)
-                        end
-
-                        for _, hl in ipairs(highlights) do
-                            selected_labels:add(hl.value.name)
-                        end
-                        change_labels(previous_labels, selected_labels, provider)
-                    end
-                    actions.select_default:replace(perform_multiselect)
-                    map({ "i", "n" }, "<ESC>", actions.select_default, { desc = "Commit label selection" })
-                    map({ "i", "n" }, "<CR>", actions.select_default, { desc = "Commit label selection" })
-                    map({ "i", "n" }, "<Tab>", actions.toggle_selection, { desc = "Toggle label selection" })
-                    map({ "i", "n" }, "<C-c>", actions.close, { desc = "Close without selection" })
-                    map({ "i", "n" }, "<C-j>", actions.nop, { desc = "No newline joining" })
-                    map({ "i", "n" }, "<C-n>", actions.move_selection_next, { desc = "Move down" })
-                    map({ "i", "n" }, "<Down>", actions.move_selection_next, { desc = "Move down" })
-                    map({ "i", "n" }, "<C-p>", actions.move_selection_previous, { desc = "Move up" })
-                    map({ "i", "n" }, "<Up>", actions.move_selection_previous, { desc = "Move up" })
-                    map({ "i", "n" }, "<C-u>", actions.results_scrolling_up, { desc = "Move page up" })
-                    map({ "i", "n" }, "<C-d>", actions.results_scrolling_down, { desc = "Move page down" })
-                    return false
-                end,
-                on_complete = {
-                    function(picker)
-                        if startup_completed then
-                            return
-                        end
-                        local i = 1
-                        for entry in picker.manager:iter() do
-                            if previous_labels:contains(entry.value.name) then
-                                picker:add_selection(picker:get_row(i))
-                            end
-                            i = i + 1
-                        end
-                        startup_completed = true
-                    end,
-                }
-            }):find()
+    local labels_file = require("gitforge.utility").get_project_labels_file(labelProvider)
+    local label_json = labels_file:io_read()
+    if label_json == nil then
+        retrieve_labels(labelProvider, function(handle)
+            vim.schedule(function()
+                labels_telescope_picker(handle.stdout, previous_labels, provider)
+            end)
         end)
-    end)
+    else
+        vim.schedule(function() retrieve_labels(labelProvider) end)
+        labels_telescope_picker(label_json, previous_labels, provider)
+    end
 end
 
 ---Changes the assignees of issue in @c buf from comma-separated list in @c previous_labels to

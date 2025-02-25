@@ -87,6 +87,7 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
 | List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |
 
+
 | Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
 | -----------------------: | :---------------------: | :----: | :----: |
 | Hide Issue               | `q`                     |   ✓    |   ✓    |
@@ -113,11 +114,20 @@ Closing an issue is done with `q`. The key bindings are configurable as [documen
 | Move page up             | `<C-u>`            |
 | Move page down           | `<C-d>`            |
 
+The values presented in the picker are:
+1. the cached project labels
+1. the retrieved list of project labels.
+
+Labels are always retrieved and on success stored in the cache. If the labels changed
+upstream, this is not automatically propagated into the picker. In this case, only the
+next label-picker usage will show the new labels. This limitation is considered acceptable,
+given the relative static nature of labels.
+
 ### Configuration
 
 This plugin probably requires a bit of configuration to select the elements issues that are of your interest.
 Smaller projects are probably fine without the more complicated key bindings. Large projects certainly aren't.
-To view only issues with specific labels, e.g. for a subproject is possible, but requires calling the matching
+Viewing only issues with specific labels, e.g. for a subproject is possible, but requires calling the matching
 `lua` functions with proper arguments.
 
 See [docs/configuration.md](docs/configuration.md) for more information on how to configure the plugin.
@@ -130,7 +140,7 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
     - [snacks.nvim](https://github.com/folke/snacks.nvim)
     - [dressing.nvim](https://github.com/stevearc/dressing.nvim)
     - [nvim-notify](https://github.com/rcarriga/nvim-notify)
-- [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) to quickly execute commands directly
+- [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) to quickly execute cli commands directly
 
 ## Plugins you might want to use instead
 
@@ -139,14 +149,9 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
 
 ## Status
 
-### General Capabilities
-
-- [x] Project Specific configuration to use different backends for different repositories
-- [x] Proper Commands for more efficient lazy loading
-
 ### Issues
 
-The issue interactions are ready to be tried out. Please create issues if you experience problems.
+The issue interactions are ready to work with. Please create issues if you experience problems.
 Right now, only single-issue interactions are available. Switch to the Web-View directly from
 `nvim` if necessary.
 
