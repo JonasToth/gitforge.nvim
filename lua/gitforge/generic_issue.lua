@@ -9,6 +9,7 @@ require("gitforge.set")
 
 ---@class Label
 ---@field name string human readable representation of the label
+---@field description string|nil description what that label means
 
 ---@class Comment
 ---@field author Author Author of the comment.
