@@ -91,10 +91,9 @@ local label_picker_display = function(entry)
     local displayer = require("telescope.pickers.entry_display").create({
         separator = " ",
         items = {
-            -- TODO: Make width configurable.
-            { width = 25, right_justify = true },       -- Label Name
+            require("gitforge").opts.ui_options.label_picker, -- Label Name
             -- NOTE: The description is an optional field of Label.
-            entry.description and { remaining = true }, -- Label Description
+            entry.description and { remaining = true },       -- Label Description
         },
     })
     return displayer({

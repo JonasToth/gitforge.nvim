@@ -3,7 +3,7 @@ local M = {}
 ---@class Project
 ---@field path string Filesystem path used to check for a prefix-match on. Passed into `vim.fs.normalize()` before matching.
 ---@field issue_provider "gh"|"glab"
----@field project string? Identifier of the project. E.g. "JonasToth/gitforge.nvim"
+---@field project string? Identifier of the project. E.g. "github.com/JonasToth/gitforge.nvim"
 
 ---@class GForgeIssueKeys
 ---Defines key binds for issue buffers.
@@ -24,6 +24,13 @@ local M = {}
 ---@class GForgeGitLab
 ---@field executable string Path to 'glab' cli executable.
 
+---@class LabelPickerOptions
+---@field width integer Number of characters to reserve to label names.
+---@field right_justify boolean Are label names aligned right or left.
+
+---@class UIOptions
+---@field label_picker LabelPickerOptions
+
 ---@class GForgeOptions
 ---Defines plugin options.
 ---@field projects Project[] List of individual project configurations.
@@ -33,6 +40,7 @@ local M = {}
 ---@field github GForgeGithub?
 ---@field gitlab GForgeGitLab?
 ---@field default_issue_provider "gh"|"glab" Default provider if no project match is found
+---@field ui_options UIOptions control appearance of the plugin
 
 ---@param opts GForgeOptions
 function M.setup(opts)
@@ -62,6 +70,15 @@ function M.setup(opts)
 
     M.opts.gitlab = opts.gitlab or {}
     M.opts.gitlab.executable = opts.gitlab.executable or "glab"
+
+    M.opts.ui_options = vim.tbl_deep_extend('keep',
+        {
+            label_picker = {
+                width = 25,
+                right_justify = true,
+            }
+        },
+        opts.ui_options or {})
 
     vim.api.nvim_create_user_command("GForgeViewIssue", M.view_issue, {})
     vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
