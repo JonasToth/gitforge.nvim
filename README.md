@@ -144,6 +144,7 @@ See [docs/configuration.md](docs/configuration.md) for more information on how t
 
 ## Plugins you might want to use instead
 
+- [snacks.nvim > GH](https://github.com/folke/snacks.nvim/blob/main/docs/gh.md)
 - [jirac.nvim](https://github.com/janBorowy/jirac.nvim)
 - [gitlab.nvim](https://github.com/harrisoncramer/gitlab.nvim)
 
