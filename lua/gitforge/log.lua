@@ -28,7 +28,7 @@ end
 ---@param command_table table<string> Command line call in string pieces to log
 function Log.executed_command(command_table)
     if command_table == nil then
-        vim.schedule(function() vim.api.nvim_err_writeln("Tries to log nil as command") end)
+        vim.schedule(function() vim.api.nvim_echo({ "Tries to log nil as command" }, true, {}) end)
     else
         Log.trace_msg(command_table)
     end

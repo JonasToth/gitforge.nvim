@@ -1,5 +1,5 @@
----@class GHIssue:IssueProvider
----@field provider "gh"
+---@class GiteaIssue:IssueProvider
+---@field provider "tea"
 ---@field new function
 ---@field newIssue function
 ---@field buf integer Buffer-ID of the issue.
@@ -18,22 +18,22 @@
 ---@field convert_cmd_result_to_issue function
 ---@field convert_cmd_result_to_issue_list function
 ---@field handle_create_issue_output_to_view_issue function
-local GHIssue = {
-    provider = "gh"
+local GiteaIssue = {
+    provider = "tea"
 }
 
 require("gitforge.issue_provider")
-setmetatable(GHIssue, { __index = IssueProvider })
+setmetatable(GiteaIssue, { __index = IssueProvider })
 
-function GHIssue:new(buf)
-    local s = setmetatable({}, { __index = GHIssue })
+function GiteaIssue:new(buf)
+    local s = setmetatable({}, { __index = GiteaIssue })
     s.buf = buf
     s.project, s.issue_number = require("gitforge.generic_issue").get_issue_proj_and_id_from_buf(buf)
     return s
 end
 
-function GHIssue:newIssue(issue_number, project)
-    local s = setmetatable({}, { __index = GHIssue })
+function GiteaIssue:newIssue(issue_number, project)
+    local s = setmetatable({}, { __index = GiteaIssue })
     s.buf = 0
     s.issue_number = issue_number
     s.project = project
@@ -43,7 +43,7 @@ end
 ---@param url string
 ---@return string|nil project
 ---@return string|nil issue_number
-local parse_github_url = function(url)
+local parse_gitea_url = function(url)
     local log = require("gitforge.log")
 
     local url_elements = vim.split(url, "/")
@@ -74,7 +74,9 @@ local parse_github_url = function(url)
         return nil, nil
     end
 
-    local project = host .. "/" .. orga .. "/" .. repo
+    --NOTE: Only the organisation and repository are used to identify the project.
+    --      This is due to errornous behavior with specific 'tea' commands.
+    local project = orga .. "/" .. repo
 
     local id = url_elements[7]
     if id == nil or #id == 0 then
@@ -92,20 +94,20 @@ local parse_github_url = function(url)
 end
 
 ---@param issue_link string URL to the issue
----@return GHIssue|nil
-function GHIssue:newFromLink(issue_link)
-    local project, issue_number = parse_github_url(issue_link)
+---@return GiteaIssue|nil
+function GiteaIssue:newFromLink(issue_link)
+    local project, issue_number = parse_gitea_url(issue_link)
     if project == nil or issue_number == nil then
         return nil
     end
     return self:newIssue(issue_number, project)
 end
 
-function GHIssue:cmd()
-    return require("gitforge").opts.github.executable
+function GiteaIssue:cmd()
+    return require("gitforge").opts.gitea.executable
 end
 
-function GHIssue:issue_cmd()
+function GiteaIssue:issue_cmd()
     local c = { self:cmd(), "issue", }
     if self.project then
         table.insert(c, "--repo")
@@ -114,130 +116,123 @@ function GHIssue:issue_cmd()
     return c
 end
 
-function GHIssue:edit_cmd()
+function GiteaIssue:edit_cmd()
     local c = self:issue_cmd()
     table.insert(c, "edit")
     table.insert(c, self.issue_number)
     return c
 end
 
-function GHIssue:cmd_fetch()
-    local required_fields =
-    "title,body,createdAt,author,comments,assignees,labels,number,state,milestone,closed,closedAt,url"
-    local gh_call = self:issue_cmd()
-    table.insert(gh_call, { "view", self.issue_number, "--json", required_fields })
-    return vim.iter(gh_call):flatten(math.huge):totable()
+function GiteaIssue:cmd_fetch()
+    local call = self:issue_cmd()
+    table.insert(call, { self.issue_number, "--output", "json" })
+    return vim.iter(call):flatten(math.huge):totable()
 end
 
 ---@param new_labels Set
 ---@param removed_labels Set
-function GHIssue:cmd_label_change(new_labels, removed_labels)
-    local gh_call = self:edit_cmd()
+function GiteaIssue:cmd_label_change(new_labels, removed_labels)
+    local call = self:edit_cmd()
 
     if not removed_labels:empty() then
-        table.insert(gh_call, "--remove-label")
-        table.insert(gh_call, removed_labels:toCSV())
+        table.insert(call, "--remove-labels")
+        table.insert(call, removed_labels:toCSV())
     end
 
     if not new_labels:empty() then
-        table.insert(gh_call, "--add-label")
-        table.insert(gh_call, new_labels:toCSV())
+        table.insert(call, "--add-labels")
+        table.insert(call, new_labels:toCSV())
     end
-    return gh_call
+    return call
 end
 
----@param new Set unused
----@param added_assignees Set
----@param removed_assignees Set
-function GHIssue:cmd_assignee_change(new, added_assignees, removed_assignees)
-    local gh_call = self:edit_cmd()
-
-    if not removed_assignees:empty() then
-        table.insert(gh_call, "--remove-assignee")
-        table.insert(gh_call, removed_assignees:toCSV())
-    end
-
-    if not added_assignees:empty() then
-        table.insert(gh_call, "--add-assignee")
-        table.insert(gh_call, added_assignees:toCSV())
-    end
-    return gh_call
+---It is not possible to remove the assignees completely due to a limitation in 'tea'.
+---@param new Set new set of assignees of that issue.
+---@param added_assignees Set unused
+---@param removed_assignees Set unused
+function GiteaIssue:cmd_assignee_change(new, added_assignees, removed_assignees)
+    local call = self:edit_cmd()
+    table.insert(call, "--add-assignees")
+    table.insert(call, new:toCSV())
+    return call
 end
 
 ---@param new_title string Non-empty string to change the title to.
-function GHIssue:cmd_title_change(new_title)
-    local gh_call = self:edit_cmd()
-    table.insert(gh_call, "--title")
-    table.insert(gh_call, new_title)
-    return gh_call
+function GiteaIssue:cmd_title_change(new_title)
+    local call = self:edit_cmd()
+    table.insert(call, "--title")
+    table.insert(call, new_title)
+    return call
 end
 
 ---@param new_desc_file string File-path to temporary file containing the new description.
-function GHIssue:cmd_description_change(new_desc_file)
-    local gh_call = self:edit_cmd()
-    table.insert(gh_call, "--body-file")
-    table.insert(gh_call, new_desc_file)
-    return gh_call
+function GiteaIssue:cmd_description_change(new_desc_file)
+    local call = self:edit_cmd()
+    table.insert(call, "--description")
+    table.insert(call, require("gitforge.utility").read_file_to_string(new_desc_file))
+    return call
 end
 
 ---@param current_state string Current state of the issue.
 ---@return table|nil possible_state A list of possible new states.
-function GHIssue:next_possible_states(current_state)
-    if current_state == "OPEN" then
-        return { "CLOSED completed", "CLOSED not planned", current_state }
+function GiteaIssue:next_possible_states(current_state)
+    if current_state == "open" then
+        return { "closed", current_state }
     else
-        return { "REOPEN", current_state }
+        return { "open", current_state }
     end
 end
 
 ---@param new_state string
 ---@return table|nil Command
-function GHIssue:cmd_state_change(new_state)
-    local gh_call = self:issue_cmd()
-    if new_state == "CLOSED completed" then
-        table.insert(gh_call, "close")
-        table.insert(gh_call, self.issue_number)
-        table.insert(gh_call, "--reason")
-        table.insert(gh_call, "completed")
-    elseif new_state == "CLOSED not planned" then
-        table.insert(gh_call, "close")
-        table.insert(gh_call, self.issue_number)
-        table.insert(gh_call, "--reason")
-        table.insert(gh_call, "not planned")
-    elseif new_state == "REOPEN" then
-        table.insert(gh_call, "reopen")
-        table.insert(gh_call, self.issue_number)
+function GiteaIssue:cmd_state_change(new_state)
+    local call = self:issue_cmd()
+    if new_state == "closed" then
+        table.insert(call, "close")
+        table.insert(call, self.issue_number)
+    elseif new_state == "open" then
+        table.insert(call, "open")
+        table.insert(call, self.issue_number)
     else
         return nil
     end
-    return gh_call
+    return call
 end
 
 ---@param comment_file string Path to temporary file to comment on
-function GHIssue:cmd_comment(comment_file)
-    local c = self:issue_cmd()
-    table.insert(c, { "comment", self.issue_number, "--body-file", comment_file })
+function GiteaIssue:cmd_comment(comment_file)
+    local c = { self:cmd(), "comment" }
+    --NOTE: If the '--repo' argument contains a hostname, the 'tea comment' command fails.
+    if self.project then
+        table.insert(c, "--repo")
+        table.insert(c, self.project)
+    end
+    table.insert(c, {
+        self.issue_number,
+        require("gitforge.utility").read_file_to_string(comment_file)
+    })
     return vim.iter(c):flatten(math.huge):totable()
 end
 
 ---@param title string Title of new issue, must not be empty.
 ---@param description_file string Path to temporary description file.
-function GHIssue:cmd_create_issue(title, description_file)
+function GiteaIssue:cmd_create_issue(title, description_file)
     local c = self:issue_cmd()
-    table.insert(c, { "create", "--title", title, "--body-file", description_file })
+    local description = require("gitforge.utility").read_file_to_string(description_file)
+    table.insert(c, { "create", "--title", title, "--description", description })
     return vim.iter(c):flatten(math.huge):totable()
 end
 
 ---@param output string Output of the 'create_issue' command exection. Tries to extract
 ---                     the issue id and return a provider for that issue.
----@return GHIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
-function GHIssue:handle_create_issue_output_to_view_issue(output)
+---@return GiteaIssue|nil issue If the issue can be identified, returns a provider to work on that issue.
+function GiteaIssue:handle_create_issue_output_to_view_issue(output)
     local log = require("gitforge.log")
 
     local lines = vim.split(output, "\n")
     local issue_link
     for index, value in ipairs(lines) do
-        if index == 1 then
+        if index == 8 then
             issue_link = value
             break
         end
@@ -248,68 +243,124 @@ function GHIssue:handle_create_issue_output_to_view_issue(output)
         return nil
     end
     log.notify_change("Created a new issue")
-    return GHIssue:newFromLink(issue_link)
+    return GiteaIssue:newFromLink(issue_link)
 end
 
 ---@param opts IssueListOpts
 ---@return table command
-function GHIssue:cmd_list_issues(opts)
+function GiteaIssue:cmd_list_issues(opts)
     local required_fields =
-    "title,labels,number,state,milestone,createdAt,updatedAt,body,author,assignees,url"
-    local gh_call = { self:issue_cmd(), "list", "--state", "all", "--json", required_fields }
+    "title,labels,index,state,milestone,created,updated,body,author,assignees,url"
+    local call = {
+        self:issue_cmd(), "list",
+        "--fields", required_fields,
+        "--output", "json"
+    }
     if opts.state then
-        table.insert(gh_call, "--state")
-        table.insert(gh_call, opts.state)
+        table.insert(call, "--state")
+        table.insert(call, opts.state)
+    else
+        table.insert(call, "--state")
+        table.insert(call, "all")
     end
     if opts.project then
-        table.insert(gh_call, "--repo")
-        table.insert(gh_call, opts.project)
+        table.insert(call, "--repo")
+        table.insert(call, opts.project)
     end
     if opts.limit then
-        table.insert(gh_call, "--limit")
-        table.insert(gh_call, tostring(opts.limit))
+        table.insert(call, "--limit")
+        table.insert(call, tostring(opts.limit))
     end
     if opts.labels then
-        table.insert(gh_call, "--label")
-        table.insert(gh_call, opts.labels)
+        table.insert(call, "--labels")
+        table.insert(call, opts.labels)
     end
     if opts.assignee then
-        table.insert(gh_call, "--assignee")
-        table.insert(gh_call, opts.assignee)
+        table.insert(call, "--assignee")
+        table.insert(call, opts.assignee)
     end
-    return vim.iter(gh_call):flatten(math.huge):totable()
+    return vim.iter(call):flatten(math.huge):totable()
 end
 
 ---@return table command
-function GHIssue:cmd_view_web()
-    return vim.iter({ self:issue_cmd(), "view", "--web", self.issue_number }):flatten(math.huge):totable()
+function GiteaIssue:cmd_view_web()
+    local c = self:cmd()
+    if self.project then
+        table.insert(c, "--repo")
+        table.insert(c, self.project)
+    end
+    return vim.iter({ c, "open", self.issue_number }):flatten(math.huge):totable()
 end
 
-function GHIssue:new_label_provider_from_self()
-    return require("gitforge.gh.label"):new(self.project)
+function GiteaIssue:new_label_provider_from_self()
+    return require("gitforge.tea.label"):new(self.project)
 end
 
----@param json_input string JSON encoded result of a command execution.
----@return Issue issue Transformed JSON to the expected interface of an issue.
-function GHIssue:convert_cmd_result_to_issue(json_input)
-    local issue = vim.fn.json_decode(json_input)
-    local project, _ = parse_github_url(issue.url)
-    issue.project = project
-    return issue
+---@return Label
+local conv_gitea_label = function(glab_label)
+    return { name = glab_label }
+end
+
+---@return Label[]
+local conv_gitea_labels = function(labels_string)
+    local result = {}
+    for _, l in pairs(vim.split(labels_string, " ")) do
+        table.insert(result, conv_gitea_label(l))
+    end
+    return result
+end
+
+---@param assignees_string string
+---@return Author[]
+local conv_gitea_assignees = function(assignees_string)
+    local result = {}
+    for _, name in pairs(vim.split(assignees_string, " ")) do
+        local trimmed_name = vim.trim(name)
+        if #trimmed_name > 0 then
+            table.insert(result, { login = trimmed_name })
+        end
+    end
+    return result
+end
+
+---@param json_input string raw text representation of the issue content.
+---@return Issue|nil issue Extracted the properties of the issue from the text.
+function GiteaIssue:convert_cmd_result_to_issue(json_input)
+    --TODO: Parse the text properly.
+    --      Upstream generation:
+    --      https://gitea.com/gitea/tea/src/commit/81481f8f9de3e1793cd6a6ee759e3e0e79e5b864/modules/print/issue.go#L15
+    -- local issue = vim.fn.json_decode(json_input)
+    -- local project, _ = parse_gitea_url(issue.url)
+    -- issue.project = project
+    return nil
 end
 
 ---@param json_input string JSON encoded result of a command execution.
 ---@return Issue[] issue Transformed JSON to the expected interface of an issue.
-function GHIssue:convert_cmd_result_to_issue_list(json_input)
+function GiteaIssue:convert_cmd_result_to_issue_list(json_input)
     local issue_list = vim.fn.json_decode(json_input)
     local result = {}
     for _, i in pairs(issue_list) do
-        local project, _ = parse_github_url(i.url)
-        local issue = vim.deepcopy(i)
+        local project, _ = parse_gitea_url(i.url)
+        local issue = {}
+        issue.body = i.body
+        issue.title = i.title
+        issue.author = { login = i.author }
         issue.project = project
+        issue.number = i.index
+        issue.createdAt = i.created
+        issue.closed = i.state == "closed"
+        --NOTE: closedAt can not be provided by the 'tea' cli tool.
+        --      'updated' is the next best thing.
+        issue.closedAt = i.updated
+        issue.state = i.state
+        issue.assignees = conv_gitea_assignees(i.assignees)
+        issue.labels = conv_gitea_labels(i.labels)
+        -- only the number of comments is provided by 'tea'. This is not useful.
+        issue.comments = nil
         table.insert(result, issue)
     end
     return result
 end
 
-return GHIssue
+return GiteaIssue

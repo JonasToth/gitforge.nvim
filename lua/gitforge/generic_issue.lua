@@ -74,8 +74,11 @@ function GenericIssue.render_issue_to_buffer(buf, issue)
         vim.api.nvim_buf_set_lines(buf, -1, -1, true,
             { 'Status: ' .. issue.state .. ' (' .. issue.createdAt .. ')' })
     else
-        vim.api.nvim_buf_set_lines(buf, -1, -1, true,
-            { 'Status: ' .. issue.state .. ' (' .. issue.closedAt .. ')' })
+        local status_string = 'Status: ' .. issue.state
+        if issue.closedAt ~= nil then
+            status_string = status_string .. ' (' .. issue.closedAt .. ')'
+        end
+        vim.api.nvim_buf_set_lines(buf, -1, -1, true, { status_string })
     end
     local assignees = {}
     for _, value in ipairs(issue.assignees) do

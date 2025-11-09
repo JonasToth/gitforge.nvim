@@ -61,6 +61,7 @@ Please call any of the following commands  to see if any issues are detected by 
 - `:checkhealth gitforge` to check the overall plugin health
 - `:checkhealth gitforge.gh` to check the Github provier
 - `:checkhealth gitforge.glab` to check the GitLab provier
+- `:checkhealth gitforge.tea` to check the Gitea provier
 
 ## Usage
 
@@ -79,13 +80,13 @@ Please call any of the following commands  to see if any issues are detected by 
 Interacting with an issue buffer is done through key binding using the `<localleader>` key.
 Closing an issue is done with `q`. The key bindings are configurable as [documented here](/docs/configuration.md#issue-settings).
 
-| Single Issue             | Default Binding         | Github | Gitlab |
-| -----------------------: | :---------------------: | :----: | :----: |
-| View an Issue            | `:GForgeViewIssue`      |   ✓    |   ✓    |
-| Create New Issue         | `:GForgeCreateIssue`    |   ✓    |   ✓    |
-| List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |
-| List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |
-| List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |
+| Single Issue             | Default Binding         | Github | Gitlab | Gitea  |
+| -----------------------: | :---------------------: | :----: | :----: | :----: |
+| View an Issue            | `:GForgeViewIssue`      |   ✓    |   ✓    |   -    |
+| Create New Issue         | `:GForgeCreateIssue`    |   ✓    |   ✓    |   ✓    |
+| List All Issues          | `:GForgeListIssues`     |   ✓    |   ✓    |   ✓    |
+| List Locally Open Issues | `:GForgeOpenedIssues`   |   ✓    |   ✓    |   ✓    |
+| List Pinned Issues       | `:GForgePinnedIssues`   |   ✓    |   ✓    |   ✓    |
 
 
 | Issue-Buffer Actions     | Default Binding         | Github | Gitlab |
