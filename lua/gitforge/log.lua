@@ -22,7 +22,7 @@ end
 ---Debug logging to trace the execution of the code. Off by default.
 ---@param msg any Debug trace message.
 function Log.trace_msg(msg)
-    -- vim.schedule(function() print(vim.inspect(msg)) end)
+    vim.schedule(function() print(vim.inspect(msg)) end)
 end
 
 ---@param command_table table<string> Command line call in string pieces to log

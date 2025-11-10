@@ -125,7 +125,14 @@ end
 
 function GiteaIssue:cmd_fetch()
     local call = self:issue_cmd()
-    table.insert(call, { self.issue_number, "--output", "json" })
+    local fields =
+    "title,labels,index,state,milestone,created,updated,body,author,assignees,url"
+    table.insert(call, {
+        self.issue_number,
+        "--output", "json",
+        "--fields", fields,
+        "--comments"
+    })
     return vim.iter(call):flatten(math.huge):totable()
 end
 
@@ -323,16 +330,61 @@ local conv_gitea_assignees = function(assignees_string)
     return result
 end
 
+---Convert the 'tea' comment format for a single issue to the standardized Comment class.
+---@return Comment
+local conv_gitea_comments = function(json_comments)
+    local result = {}
+    for _, value in ipairs(json_comments) do
+        table.insert(result, {
+            author = { login = value.author},
+            createdAt = value.created,
+            body = value.body,
+        })
+    end
+    return result
+end
+
 ---@param json_input string raw text representation of the issue content.
----@return Issue|nil issue Extracted the properties of the issue from the text.
+---@return Issue issue Extracted the properties of the issue from the text.
 function GiteaIssue:convert_cmd_result_to_issue(json_input)
-    --TODO: Parse the text properly.
-    --      Upstream generation:
-    --      https://gitea.com/gitea/tea/src/commit/81481f8f9de3e1793cd6a6ee759e3e0e79e5b864/modules/print/issue.go#L15
-    -- local issue = vim.fn.json_decode(json_input)
-    -- local project, _ = parse_gitea_url(issue.url)
-    -- issue.project = project
-    return nil
+    local json = vim.fn.json_decode(json_input)
+    return {
+        title = json.issue.title,
+        body = json.issue.title,
+        author = { login = json.issue.user },
+        project = json.issue.project,
+        number = json.issue.index,
+        createdAt = json.issue.created,
+        closed = json.issue.state == "closed",
+        closedAt = json.issue.closedAt,
+        state = json.issue.state,
+        assignees = json.issue.assignees,
+        labels = json.issue.labels,
+        comments = conv_gitea_comments(json.comments),
+    }
+end
+
+---Translates the JSON structure returned by 'tea' into the standardized @c Issue type.
+local conv_single_gitea_issue = function(gitea_issue)
+    local project, _ = parse_gitea_url(gitea_issue.url)
+    local issue = {
+        title = gitea_issue.title,
+        body = gitea_issue.body,
+        author = { login = gitea_issue.author },
+        project = project,
+        number = gitea_issue.index,
+        createdAt = gitea_issue.created,
+        closed = gitea_issue.state == "closed",
+        --NOTE: closedAt can not be provided by the 'tea' cli tool.
+        --      'updated' is the next best thing.
+        closedAt = gitea_issue.updated,
+        state = gitea_issue.state,
+        assignees = conv_gitea_assignees(gitea_issue.assignees),
+        labels = conv_gitea_labels(gitea_issue.labels),
+        -- only the number of comments is provided by 'tea'. This is not useful.
+        comments = nil,
+    }
+    return issue
 end
 
 ---@param json_input string JSON encoded result of a command execution.
@@ -340,25 +392,8 @@ end
 function GiteaIssue:convert_cmd_result_to_issue_list(json_input)
     local issue_list = vim.fn.json_decode(json_input)
     local result = {}
-    for _, i in pairs(issue_list) do
-        local project, _ = parse_gitea_url(i.url)
-        local issue = {}
-        issue.body = i.body
-        issue.title = i.title
-        issue.author = { login = i.author }
-        issue.project = project
-        issue.number = i.index
-        issue.createdAt = i.created
-        issue.closed = i.state == "closed"
-        --NOTE: closedAt can not be provided by the 'tea' cli tool.
-        --      'updated' is the next best thing.
-        issue.closedAt = i.updated
-        issue.state = i.state
-        issue.assignees = conv_gitea_assignees(i.assignees)
-        issue.labels = conv_gitea_labels(i.labels)
-        -- only the number of comments is provided by 'tea'. This is not useful.
-        issue.comments = nil
-        table.insert(result, issue)
+    for _, issue in pairs(issue_list) do
+        table.insert(result, conv_single_gitea_issue(issue))
     end
     return result
 end

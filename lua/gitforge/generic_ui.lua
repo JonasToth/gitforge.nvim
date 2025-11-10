@@ -110,6 +110,8 @@ function GenericUI.refresh_issue(provider, completion)
                 local util = require("gitforge.utility")
 
                 local issue = prov:convert_cmd_result_to_issue(handle.stdout)
+                log.trace_msg("Received Issue for Rendering:")
+                log.trace_msg(issue)
                 if issue ~= nil then
                     log.trace_msg("update single issue in buf: " .. tostring(prov.buf))
                     prov.buf = generic_issue.render_issue_to_buffer(prov.buf, issue)
