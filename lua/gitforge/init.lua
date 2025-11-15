@@ -39,7 +39,8 @@ local M = {}
 ---@field issue_keys GForgeIssueKeys?
 ---@field github GForgeGithub?
 ---@field gitlab GForgeGitLab?
----@field default_issue_provider "gh"|"glab" Default provider if no project match is found
+---@field default_issue_provider "gh"|"glab" Default issue-provider if no project match is found (default "gh")
+---@field default_pr_provider "gh"|"glab" Default pr-provider if no project match is found (default "gh")
 ---@field ui_options UIOptions control appearance of the plugin
 
 ---@param opts GForgeOptions
@@ -51,6 +52,7 @@ function M.setup(opts)
     M.opts.timeout = opts.timeout or 3500
     M.opts.list_max_title_length = opts.list_max_title_length or 60
     M.opts.default_issue_provider = opts.default_issue_provider or "gh"
+    M.opts.default_pr_provider = opts.default_pr_provider or "gh"
 
     local ik = opts.issue_keys or {}
     M.opts.issue_keys = ik
@@ -82,6 +84,7 @@ function M.setup(opts)
 
     vim.api.nvim_create_user_command("GForgeViewIssue", M.view_issue, {})
     vim.api.nvim_create_user_command("GForgeListIssues", M.list_issues, {})
+    vim.api.nvim_create_user_command("GForgeListPR", M.list_prs, {})
     vim.api.nvim_create_user_command("GForgeOpenedIssues", M.list_opened_issues, {})
     vim.api.nvim_create_user_command("GForgePinnedIssues", M.list_pinned_issues, {})
     vim.api.nvim_create_user_command("GForgeCreateIssue", M.create_issue, {})
@@ -110,6 +113,11 @@ end
 function M.list_issues(args)
     local provider = require("gitforge.issue_provider").get_from_cwd_or_default()
     require("gitforge.issue_actions").list_issues({}, provider)
+end
+
+function M.list_prs(args)
+    local provider = require("gitforge.pr_provider").get_from_cwd_or_default()
+    require("gitforge.pr_actions").list_prs({}, provider)
 end
 
 function M.list_opened_issues(args)
