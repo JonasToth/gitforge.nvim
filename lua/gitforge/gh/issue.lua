@@ -40,61 +40,10 @@ function GHIssue:newIssue(issue_number, project)
     return s
 end
 
----@param url string
----@return string|nil project
----@return string|nil issue_number
-local parse_github_url = function(url)
-    local log = require("gitforge.log")
-
-    local url_elements = vim.split(url, "/")
-
-    if #url_elements ~= 7 then
-        log.notify_failure("Splitting url did not return the expected number of elements.")
-        log.trace_msg(vim.inspect(url_elements))
-        return nil, nil
-    end
-
-    local host = url_elements[3]
-    if host == nil or #host == 0 then
-        log.notify_failure("Failed to extract the gitforge host")
-        log.trace_msg(vim.inspect(host))
-        return nil, nil
-    end
-    local orga = url_elements[4]
-    if orga == nil or #orga == 0 then
-        log.notify_failure("Failed to extract the organization")
-        log.trace_msg(vim.inspect(orga))
-        return nil, nil
-    end
-
-    local repo = url_elements[5]
-    if repo == nil or #repo == 0 then
-        log.notify_failure("Failed to extract the repository")
-        log.trace_msg(vim.inspect(repo))
-        return nil, nil
-    end
-
-    local project = host .. "/" .. orga .. "/" .. repo
-
-    local id = url_elements[7]
-    if id == nil or #id == 0 then
-        log.notify_failure("Failed to extract issue id from URL")
-        log.trace_msg(vim.join(url_elements, " : "))
-        return nil, nil
-    end
-    local int_id = tonumber(id)
-    if int_id == nil then
-        log.notify_failure("Failed to parse id-string as int")
-        log.trace_msg(id)
-        return nil, nil
-    end
-    return project, tostring(int_id)
-end
-
 ---@param issue_link string URL to the issue
 ---@return GHIssue|nil
 function GHIssue:newFromLink(issue_link)
-    local project, issue_number = parse_github_url(issue_link)
+    local project, issue_number = require("gitforge.url_parsing").parse_github_issue_pr_url(issue_link)
     if project == nil or issue_number == nil then
         return nil
     end
@@ -293,7 +242,7 @@ end
 ---@return Issue issue Transformed JSON to the expected interface of an issue.
 function GHIssue:convert_cmd_result_to_issue(json_input)
     local issue = vim.fn.json_decode(json_input)
-    local project, _ = parse_github_url(issue.url)
+    local project, _ = require("gitforge.url_parsing").parse_github_issue_pr_url(issue.url)
     issue.project = project
     return issue
 end
@@ -304,7 +253,7 @@ function GHIssue:convert_cmd_result_to_issue_list(json_input)
     local issue_list = vim.fn.json_decode(json_input)
     local result = {}
     for _, i in pairs(issue_list) do
-        local project, _ = parse_github_url(i.url)
+        local project, _ = require("gitforge.url_parsing").parse_github_issue_pr_url(i.url)
         local issue = vim.deepcopy(i)
         issue.project = project
         table.insert(result, issue)
